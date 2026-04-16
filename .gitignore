@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+logs/
+market_data/
+action_history/
+action.json
+dashboard.pid
+performance.csv
+trade_log.csv
+state.json
+*.log
+.DS_Store

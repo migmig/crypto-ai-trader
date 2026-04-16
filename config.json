@@ -1,0 +1,23 @@
+{
+  "initial_capital": 10000000,
+  "markets": ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-SOL", "KRW-DOGE"],
+  "mode": "simulation",
+  "cycle_interval_minutes": 5,
+  "fee_rate": 0.0005,
+  "safety": {
+    "max_single_trade_pct": 0.30,
+    "max_loss_pct": -0.15,
+    "max_single_coin_pct": 0.50,
+    "max_trades_per_day": 20,
+    "min_hold_minutes": 30
+  },
+  "indicators": {
+    "rsi_period": 14,
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "bb_period": 20,
+    "bb_std": 2,
+    "ma_periods": [5, 20, 60]
+  }
+}

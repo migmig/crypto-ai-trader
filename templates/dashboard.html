@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Crypto Trader</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0a0e17; color: #e1e5ee; min-height: 100vh; }
+.header { background: #111827; border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 20px; font-weight: 700; }
+.header h1 span { color: #60a5fa; }
+.header .status { font-size: 13px; color: #9ca3af; }
+.header .mode { background: #065f46; color: #6ee7b7; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.container { max-width: 1280px; margin: 0 auto; padding: 20px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; }
+.card .label { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.card .value { font-size: 24px; font-weight: 700; }
+.card .sub { font-size: 13px; margin-top: 4px; }
+.plus { color: #34d399; }
+.minus { color: #f87171; }
+.zero { color: #9ca3af; }
+.section { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+.section h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 10px 12px; color: #9ca3af; font-weight: 500; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #1f2937; }
+td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }
+tr:hover { background: #1f2937; }
+.trend-up { color: #34d399; }
+.trend-down { color: #f87171; }
+.trend-side { color: #fbbf24; }
+.rsi-bar { display: inline-block; width: 50px; height: 6px; background: #374151; border-radius: 3px; position: relative; vertical-align: middle; margin-left: 6px; }
+.rsi-fill { height: 100%; border-radius: 3px; position: absolute; left: 0; top: 0; }
+.ai-box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; }
+.ai-box .label { color: #60a5fa; font-weight: 600; margin-bottom: 4px; }
+.ai-box .risk { margin-top: 8px; color: #fbbf24; }
+.holdings-empty { text-align: center; padding: 40px; color: #6b7280; font-size: 14px; }
+.trade-action { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.trade-buy { background: #065f46; color: #6ee7b7; }
+.trade-sell { background: #7f1d1d; color: #fca5a5; }
+.refresh-btn { background: #1f2937; border: 1px solid #374151; color: #e1e5ee; padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+.refresh-btn:hover { background: #374151; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+.perf-chart { width: 100%; height: 200px; position: relative; }
+.perf-chart canvas { width: 100% !important; height: 100% !important; }
+.last-update { font-size: 12px; color: #6b7280; }
+.coin-icon { font-size: 16px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1><span>AI</span> Crypto Trader</h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <span class="mode">SIMULATION</span>
+    <span class="last-update" id="lastUpdate"></span>
+    <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Summary Cards -->
+  <div class="cards" id="summaryCards">
+    <div class="card">
+      <div class="label">Total Value</div>
+      <div class="value" id="totalValue">-</div>
+      <div class="sub" id="totalPL">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Cash</div>
+      <div class="value" id="cashValue">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Holdings</div>
+      <div class="value" id="holdingsValue">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Today Trades</div>
+      <div class="value" id="todayTrades">-</div>
+      <div class="sub" id="lastTradeTime">-</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Market Overview -->
+    <div class="section">
+      <h2>Market Overview</h2>
+      <table>
+        <thead>
+          <tr><th>Coin</th><th>Price</th><th>Change</th><th>RSI</th><th>MACD</th><th>Trend</th></tr>
+        </thead>
+        <tbody id="marketTable"></tbody>
+      </table>
+    </div>
+
+    <!-- AI Judgment -->
+    <div class="section">
+      <h2>AI Judgment</h2>
+      <div class="ai-box" id="aiBox">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Holdings -->
+  <div class="section">
+    <h2>Holdings</h2>
+    <div id="holdingsSection"></div>
+  </div>
+
+  <!-- Performance Chart -->
+  <div class="section">
+    <h2>Performance</h2>
+    <div class="perf-chart"><canvas id="perfChart"></canvas></div>
+  </div>
+
+  <!-- Recent Trades -->
+  <div class="section">
+    <h2>Recent Trades</h2>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Action</th><th>Market</th><th>Amount</th><th>Price</th><th>Result</th></tr>
+      </thead>
+      <tbody id="tradesTable"></tbody>
+    </table>
+    <div id="tradesEmpty" class="holdings-empty" style="display:none;">No trades yet</div>
+  </div>
+</div>
+
+<script>
+function fmt(n) {
+  if (n == null) return '-';
+  return Number(n).toLocaleString('ko-KR');
+}
+function fmtWon(n) {
+  if (n == null) return '-';
+  n = Number(n);
+  if (Math.abs(n) >= 100000000) return (n/100000000).toFixed(1) + ' B';
+  if (Math.abs(n) >= 10000) return (n/10000).toFixed(0) + ' M';
+  return fmt(n);
+}
+function plClass(v) {
+  v = Number(v);
+  if (v > 0) return 'plus';
+  if (v < 0) return 'minus';
+  return 'zero';
+}
+function rsiColor(v) {
+  if (v <= 30) return '#34d399';
+  if (v >= 70) return '#f87171';
+  if (v <= 40) return '#6ee7b7';
+  if (v >= 60) return '#fca5a5';
+  return '#60a5fa';
+}
+function trendClass(t) {
+  if (!t) return '';
+  if (t.includes('상승')) return 'trend-up';
+  if (t.includes('하락')) return 'trend-down';
+  return 'trend-side';
+}
+function timeAgo(ts) {
+  if (!ts) return '';
+  let d = new Date(ts);
+  let diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+function shortTime(ts) {
+  if (!ts) return '-';
+  let d = new Date(ts);
+  return d.toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+async function loadStatus() {
+  try {
+    let res = await fetch('/api/status');
+    let d = await res.json();
+
+    document.getElementById('totalValue').textContent = '\u20a9' + fmt(d.total);
+    let plSign = d.total_pl >= 0 ? '+' : '';
+    document.getElementById('totalPL').innerHTML =
+      '<span class="' + plClass(d.total_pl) + '">' + plSign + fmt(d.total_pl) + ' (' + plSign + d.total_pl_pct + '%)</span>';
+    document.getElementById('cashValue').textContent = '\u20a9' + fmt(d.cash);
+    document.getElementById('holdingsValue').textContent = '\u20a9' + fmt(d.holdings_value);
+    document.getElementById('todayTrades').textContent = d.total_trades_today;
+    document.getElementById('lastTradeTime').textContent = d.last_trade_time ? timeAgo(d.last_trade_time) : 'No trades';
+
+    if (d.collected_at) {
+      document.getElementById('lastUpdate').textContent = 'Data: ' + timeAgo(d.collected_at);
+    }
+
+    // Market table
+    let html = '';
+    d.markets.forEach(m => {
+      let chg = (m.change_rate * 100).toFixed(2);
+      let chgSign = m.change_rate >= 0 ? '+' : '';
+      let rsi = m.rsi_15m != null ? m.rsi_15m : '-';
+      let macdH = m.macd_hist != null ? (m.macd_hist >= 0 ? '+' : '') + fmt(m.macd_hist) : '-';
+      html += '<tr>';
+      html += '<td><strong>' + m.coin + '</strong></td>';
+      html += '<td>\u20a9' + fmt(m.price) + '</td>';
+      html += '<td class="' + plClass(m.change_rate) + '">' + chgSign + chg + '%</td>';
+      html += '<td>';
+      if (rsi !== '-') {
+        html += rsi + '<div class="rsi-bar"><div class="rsi-fill" style="width:' + rsi + '%;background:' + rsiColor(rsi) + '"></div></div>';
+      } else { html += '-'; }
+      html += '</td>';
+      html += '<td class="' + plClass(m.macd_hist) + '">' + macdH + '</td>';
+      html += '<td class="' + trendClass(m.trend) + '">' + (m.trend || '-') + '</td>';
+      html += '</tr>';
+    });
+    document.getElementById('marketTable').innerHTML = html;
+
+    // AI Box
+    let aiHtml = '';
+    if (d.last_action.timestamp) {
+      aiHtml += '<div class="label">Market Summary</div>';
+      aiHtml += '<div>' + (d.last_action.market_summary || 'N/A') + '</div>';
+      aiHtml += '<div class="risk">Risk: ' + (d.last_action.risk_assessment || 'N/A') + '</div>';
+      if (d.last_action.actions && d.last_action.actions.length > 0) {
+        aiHtml += '<div style="margin-top:12px"><div class="label">Actions</div>';
+        d.last_action.actions.forEach(a => {
+          let cls = a.action === 'buy' ? 'trade-buy' : 'trade-sell';
+          aiHtml += '<div style="margin-top:6px"><span class="trade-action ' + cls + '">' + a.action.toUpperCase() + '</span> ';
+          aiHtml += a.market + ' \u20a9' + fmt(a.amount_krw || '') + '</div>';
+          aiHtml += '<div style="color:#9ca3af;font-size:13px;margin-top:2px">' + (a.reason || '') + '</div>';
+        });
+        aiHtml += '</div>';
+      } else {
+        aiHtml += '<div style="margin-top:12px;color:#6b7280;">No action - holding position</div>';
+      }
+      aiHtml += '<div style="margin-top:12px;font-size:12px;color:#6b7280;">' + timeAgo(d.last_action.timestamp) + '</div>';
+    } else {
+      aiHtml = '<div style="color:#6b7280;">No judgment yet</div>';
+    }
+    document.getElementById('aiBox').innerHTML = aiHtml;
+
+    // Holdings
+    if (d.holdings.length === 0) {
+      document.getElementById('holdingsSection').innerHTML = '<div class="holdings-empty">No holdings - 100% cash</div>';
+    } else {
+      let hHtml = '<table><thead><tr><th>Coin</th><th>Qty</th><th>Avg Price</th><th>Current</th><th>Value</th><th>P&L</th></tr></thead><tbody>';
+      d.holdings.forEach(h => {
+        let plSign = h.pl >= 0 ? '+' : '';
+        hHtml += '<tr>';
+        hHtml += '<td><strong>' + h.coin + '</strong></td>';
+        hHtml += '<td>' + h.qty.toFixed(6) + '</td>';
+        hHtml += '<td>\u20a9' + fmt(h.avg_price) + '</td>';
+        hHtml += '<td>\u20a9' + fmt(h.current_price) + '</td>';
+        hHtml += '<td>\u20a9' + fmt(h.value) + '</td>';
+        hHtml += '<td class="' + plClass(h.pl) + '">' + plSign + fmt(h.pl) + ' (' + plSign + h.pl_pct + '%)</td>';
+        hHtml += '</tr>';
+      });
+      hHtml += '</tbody></table>';
+      document.getElementById('holdingsSection').innerHTML = hHtml;
+    }
+  } catch(e) {
+    console.error('Status load error:', e);
+  }
+}
+
+async function loadTrades() {
+  try {
+    let res = await fetch('/api/trades');
+    let trades = await res.json();
+    if (trades.length === 0) {
+      document.getElementById('tradesTable').innerHTML = '';
+      document.getElementById('tradesEmpty').style.display = 'block';
+      return;
+    }
+    document.getElementById('tradesEmpty').style.display = 'none';
+    let html = '';
+    trades.forEach(t => {
+      let cls = t.action === 'buy' ? 'trade-buy' : 'trade-sell';
+      html += '<tr>';
+      html += '<td>' + shortTime(t.timestamp) + '</td>';
+      html += '<td><span class="trade-action ' + cls + '">' + t.action.toUpperCase() + '</span></td>';
+      html += '<td>' + (t.market || '').replace('KRW-','') + '</td>';
+      html += '<td>\u20a9' + fmt(t.amount_krw) + '</td>';
+      html += '<td>\u20a9' + fmt(t.price) + '</td>';
+      html += '<td style="font-size:12px">' + (t.result || '') + '</td>';
+      html += '</tr>';
+    });
+    document.getElementById('tradesTable').innerHTML = html;
+  } catch(e) {
+    console.error('Trades load error:', e);
+  }
+}
+
+let chart = null;
+async function loadPerformance() {
+  try {
+    let res = await fetch('/api/performance');
+    let perf = await res.json();
+    if (perf.length === 0) return;
+
+    let labels = perf.map(p => {
+      let d = new Date(p.timestamp);
+      return d.toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    });
+    let values = perf.map(p => Number(p.total_value));
+    let plPcts = perf.map(p => (Number(p.pl_pct) * 100).toFixed(2));
+    let initial = perf.length > 0 ? Number(perf[0].total_value) : 10000000;
+
+    let canvas = document.getElementById('perfChart');
+    let ctx = canvas.getContext('2d');
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = 200;
+
+    let w = canvas.width, h = canvas.height;
+    let pad = {t:20, r:20, b:30, l:70};
+    let gw = w - pad.l - pad.r, gh = h - pad.t - pad.b;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (values.length < 2) return;
+
+    let minV = Math.min(...values) * 0.999;
+    let maxV = Math.max(...values) * 1.001;
+    if (minV === maxV) { minV -= 1000; maxV += 1000; }
+
+    // Grid
+    ctx.strokeStyle = '#1f2937';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      let y = pad.t + (gh / 4) * i;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+      let val = maxV - (maxV - minV) * (i / 4);
+      ctx.fillStyle = '#6b7280'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText('\u20a9' + Math.round(val).toLocaleString(), pad.l - 8, y + 4);
+    }
+
+    // Line
+    ctx.beginPath();
+    ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2;
+    values.forEach((v, i) => {
+      let x = pad.l + (gw / (values.length - 1)) * i;
+      let y = pad.t + gh - ((v - minV) / (maxV - minV)) * gh;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Fill
+    let lastX = pad.l + gw;
+    let lastY = pad.t + gh - ((values[values.length-1] - minV) / (maxV - minV)) * gh;
+    ctx.lineTo(lastX, pad.t + gh);
+    ctx.lineTo(pad.l, pad.t + gh);
+    ctx.closePath();
+    let grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + gh);
+    grad.addColorStop(0, 'rgba(96,165,250,0.15)');
+    grad.addColorStop(1, 'rgba(96,165,250,0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Initial line
+    let initY = pad.t + gh - ((initial - minV) / (maxV - minV)) * gh;
+    ctx.strokeStyle = '#374151'; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(pad.l, initY); ctx.lineTo(w - pad.r, initY); ctx.stroke();
+    ctx.setLineDash([]);
+
+  } catch(e) {
+    console.error('Perf load error:', e);
+  }
+}
+
+function loadAll() {
+  loadStatus();
+  loadTrades();
+  loadPerformance();
+}
+
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
