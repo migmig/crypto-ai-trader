@@ -5,6 +5,7 @@ logs/
 market_data/
 action_history/
 action.json
+signals.json
 dashboard.pid
 performance.csv
 trade_log.csv

@@ -6,15 +6,23 @@ import csv
 import os
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, send_from_directory
 
 BASE_DIR = Path(__file__).parent
-app = Flask(__name__)
+DIST_DIR = BASE_DIR / "static" / "dist"
+app = Flask(__name__, static_folder=str(DIST_DIR / "assets"), static_url_path="/assets")
 
-try:
-    import pyupbit
-except ImportError:
-    pyupbit = None
+pyupbit = None
+
+def _get_pyupbit():
+    global pyupbit
+    if pyupbit is None:
+        try:
+            import pyupbit as _pu
+            pyupbit = _pu
+        except ImportError:
+            pass
+    return pyupbit
 
 
 def load_json(filename):
@@ -39,10 +47,11 @@ def load_csv(filename):
 def get_current_prices(markets):
     """현재가 조회 (pyupbit 또는 latest.json fallback)"""
     prices = {}
+    pu = _get_pyupbit()
     try:
-        if pyupbit:
+        if pu:
             for m in markets:
-                p = pyupbit.get_current_price(m)
+                p = pu.get_current_price(m)
                 if p:
                     prices[m] = p
             if prices:
@@ -62,7 +71,7 @@ def get_current_prices(markets):
 
 @app.route("/")
 def index():
-    return render_template("dashboard.html")
+    return send_from_directory(str(DIST_DIR), "index.html")
 
 
 @app.route("/api/status")
@@ -140,9 +149,13 @@ def api_status():
         "total_trades_today": state.get("total_trades_today", 0),
         "last_trade_time": state.get("last_trade_time"),
         "last_action": {
+            "source": action.get("source", ""),
             "market_summary": action.get("market_summary", ""),
             "risk_assessment": action.get("risk_assessment", ""),
             "actions": action.get("actions", []),
+            "per_coin": action.get("per_coin", {}),
+            "conditions_checked": action.get("conditions_checked", []),
+            "triggers_next_cycle": action.get("triggers_next_cycle", []),
             "timestamp": action.get("timestamp", ""),
         },
         "collected_at": data.get("collected_at", ""),
@@ -160,6 +173,32 @@ def api_trades():
 def api_performance():
     perf = load_csv("performance.csv")
     return jsonify(perf[-500:])  # 최근 500건
+
+
+@app.route("/api/judgments")
+def api_judgments():
+    """AI 판단 히스토리 (action_history/ 아카이브)"""
+    history_dir = BASE_DIR / "action_history"
+    if not history_dir.exists():
+        return jsonify([])
+    files = sorted(history_dir.glob("action_*.json"), reverse=True)[:50]
+    results = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text())
+            results.append({
+                "timestamp": data.get("timestamp", ""),
+                "source": data.get("source", ""),
+                "actions": data.get("actions", []),
+                "market_summary": data.get("market_summary", ""),
+                "risk_assessment": data.get("risk_assessment", ""),
+                "per_coin": data.get("per_coin", {}),
+                "conditions_checked": data.get("conditions_checked", []),
+                "triggers_next_cycle": data.get("triggers_next_cycle", []),
+            })
+        except Exception:
+            continue
+    return jsonify(results)
 
 
 if __name__ == "__main__":

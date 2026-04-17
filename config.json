@@ -2,8 +2,12 @@
   "initial_capital": 10000000,
   "markets": ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-ADA"],
   "mode": "simulation",
-  "cycle_interval_minutes": 5,
+  "cycle_interval_minutes": 2,
   "fee_rate": 0.0005,
+  "hybrid": {
+    "always_call_ai": false,
+    "description": "true면 매 사이클 Claude 호출. false면 알고리즘 신호가 non-hold일 때만 호출"
+  },
   "safety": {
     "max_single_trade_pct": 0.30,
     "max_loss_pct": -0.15,
