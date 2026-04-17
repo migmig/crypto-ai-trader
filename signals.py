@@ -56,6 +56,13 @@ def classify(market, mdata, state_holding):
         and macd_hist_15m is not None
         and prev_hist > 0 >= macd_hist_15m
     )
+    # v2: MACD 히스토그램이 음수에서 덜 음수로 전환 (반등 기미)
+    hist_rising_from_neg = (
+        prev_hist is not None
+        and macd_hist_15m is not None
+        and prev_hist < 0
+        and macd_hist_15m > prev_hist
+    )
 
     near_bb_lower = (
         price is not None and bb_lower is not None and price <= bb_lower * 1.02
@@ -69,9 +76,10 @@ def classify(market, mdata, state_holding):
             "rule": "적극 매수",
             "signal": "buy_strong",
             "checks": [
-                ("RSI15m ≤ 30", rsi_15m is not None and rsi_15m <= 30, rsi_15m),
-                ("MACD 골든크로스", macd_golden, f"prev {prev_hist} → cur {macd_hist_15m}"),
-                ("거래량비율 ≥ 1.5", vol_ratio is not None and vol_ratio >= 1.5, vol_ratio),
+                ("RSI15m ≤ 35", rsi_15m is not None and rsi_15m <= 35, rsi_15m),
+                ("MACD 반등", macd_golden or hist_rising_from_neg,
+                 f"prev {prev_hist} → cur {macd_hist_15m}"),
+                ("거래량비율 ≥ 1.3", vol_ratio is not None and vol_ratio >= 1.3, vol_ratio),
             ],
         },
         {
@@ -88,7 +96,8 @@ def classify(market, mdata, state_holding):
             "checks": [
                 ("RSI15m ≤ 40", rsi_15m is not None and rsi_15m <= 40, rsi_15m),
                 ("볼린저 하단 근접", near_bb_lower, f"price {price} / lower {bb_lower}"),
-                ("추세=상승", trend == "상승", trend),
+                ("추세≠하락", trend != "하락", trend),
+                ("일봉 과열 아님", rsi_1d is None or rsi_1d <= 65, rsi_1d),
             ],
         },
         {

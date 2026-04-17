@@ -70,6 +70,7 @@ def get_current_prices(markets):
 
 
 @app.route("/")
+@app.route("/history")
 def index():
     return send_from_directory(str(DIST_DIR), "index.html")
 
@@ -177,27 +178,52 @@ def api_performance():
 
 @app.route("/api/judgments")
 def api_judgments():
-    """AI 판단 히스토리 (action_history/ 아카이브)"""
+    """AI 판단 히스토리 (action_history/ — JSON + tar.gz 아카이브)"""
+    import tarfile, io
     history_dir = BASE_DIR / "action_history"
     if not history_dir.exists():
         return jsonify([])
-    files = sorted(history_dir.glob("action_*.json"), reverse=True)[:50]
+
     results = []
-    for f in files:
+
+    def _parse(data):
+        return {
+            "timestamp": data.get("timestamp", ""),
+            "source": data.get("source", ""),
+            "actions": data.get("actions", []),
+            "market_summary": data.get("market_summary", ""),
+            "risk_assessment": data.get("risk_assessment", ""),
+            "per_coin": data.get("per_coin", {}),
+            "conditions_checked": data.get("conditions_checked", []),
+            "triggers_next_cycle": data.get("triggers_next_cycle", []),
+        }
+
+    # 1) 개별 JSON (최신 — 아직 압축 안 된 것)
+    for f in sorted(history_dir.glob("action_*.json"), reverse=True)[:50]:
         try:
-            data = json.loads(f.read_text())
-            results.append({
-                "timestamp": data.get("timestamp", ""),
-                "source": data.get("source", ""),
-                "actions": data.get("actions", []),
-                "market_summary": data.get("market_summary", ""),
-                "risk_assessment": data.get("risk_assessment", ""),
-                "per_coin": data.get("per_coin", {}),
-                "conditions_checked": data.get("conditions_checked", []),
-                "triggers_next_cycle": data.get("triggers_next_cycle", []),
-            })
+            results.append(_parse(json.loads(f.read_text())))
         except Exception:
             continue
+
+    # 2) tar.gz 아카이브 (일별 압축분, 최근 3일치만)
+    if len(results) < 50:
+        remain = 50 - len(results)
+        archives = sorted(history_dir.glob("archive_*.tar.gz"), reverse=True)[:3]
+        for arc in archives:
+            try:
+                with tarfile.open(arc, "r:gz") as tf:
+                    members = sorted(tf.getnames(), reverse=True)
+                    for name in members[:remain]:
+                        data = json.loads(tf.extractfile(name).read())
+                        results.append(_parse(data))
+                        remain -= 1
+                        if remain <= 0:
+                            break
+            except Exception:
+                continue
+            if remain <= 0:
+                break
+
     return jsonify(results)
 
 

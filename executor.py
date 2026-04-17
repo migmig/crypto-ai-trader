@@ -157,6 +157,35 @@ def check_stop_loss(state):
     return False, pl_pct
 
 
+def check_trailing_stops(state):
+    """포지션별 트레일링 손절 (-7% from peak).
+    각 보유 코인의 peak_price를 갱신하고, 현재가가 peak에서 trailing_stop_pct 이상
+    하락했으면 해당 포지션만 매도 대상으로 반환."""
+    trail_pct = CONFIG["safety"].get("trailing_stop_pct", -0.07)
+    to_sell = []
+    for market, h in state["holdings"].items():
+        if h.get("qty", 0) <= 0:
+            continue
+        price = get_current_price(market)
+        if not price:
+            continue
+        avg = h.get("avg_price", price)
+        # 수익 구간에서만 트레일링 활성화 (손실 구간은 -15% 전체 백스톱에 의존)
+        if price <= avg:
+            h["peak_price"] = avg  # peak 리셋
+            continue
+        # peak_price 갱신
+        peak = h.get("peak_price", avg)
+        if price > peak:
+            peak = price
+        h["peak_price"] = peak
+        # 고점 대비 하락폭 판단
+        drop = (price - peak) / peak if peak > 0 else 0
+        if drop <= trail_pct:
+            to_sell.append((market, price, peak, drop))
+    return to_sell
+
+
 def execute_buy_sim(state, market, amount_krw, reason):
     """시뮬레이션 매수"""
     price = get_current_price(market)
@@ -175,10 +204,12 @@ def execute_buy_sim(state, market, amount_krw, reason):
     else:
         avg_price = price
 
+    prev_peak = prev.get("peak_price", 0)
     state["holdings"][market] = {
         "qty": total_qty,
         "avg_price": round(avg_price, 2),
         "bought_at": datetime.now().isoformat(),
+        "peak_price": max(price, prev_peak),
     }
     state["cash"] -= amount_krw
     state["total_trades_today"] += 1
@@ -227,6 +258,26 @@ def execute_sell_sim(state, market, reason, sell_pct=1.0):
     return state, "OK"
 
 
+def _compress_old_actions(archive_dir):
+    """오늘 이전 JSON을 일별 tar.gz로 압축 후 삭제."""
+    import tarfile
+    today = datetime.now().strftime("%Y%m%d")
+    by_day = {}
+    for f in archive_dir.glob("action_*.json"):
+        day = f.name[7:15]  # action_YYYYMMDD_HHMMSS.json
+        if day < today:
+            by_day.setdefault(day, []).append(f)
+    for day, files in by_day.items():
+        arc = archive_dir / f"archive_{day}.tar.gz"
+        if arc.exists():
+            continue
+        with tarfile.open(arc, "w:gz") as tf:
+            for f in sorted(files):
+                tf.add(f, arcname=f.name)
+        for f in files:
+            f.unlink()
+
+
 def execute():
     state = load_state()
     action_data = load_action()
@@ -246,16 +297,35 @@ def execute():
     if action_data.get("risk_assessment"):
         print(f"⚠️  리스크: {action_data['risk_assessment']}")
 
-    # 손절 체크
+    # 포지션별 트레일링 손절 (-7% from peak)
+    trailing_sells = check_trailing_stops(state)
+    for market, price, peak, drop in trailing_sells:
+        print(f"\n🔻 [트레일링 손절] {market} | 고점 ₩{peak:,.0f} → 현재 ₩{price:,.0f} ({drop:.2%})")
+        state, _ = execute_sell_sim(
+            state, market,
+            f"트레일링 손절 (고점 ₩{peak:,.0f} → ₩{price:,.0f}, {drop:.2%})"
+        )
+
+    # 전체 포트폴리오 손절 (-15% 백스톱)
     need_stop, current_pl = check_stop_loss(state)
     if need_stop:
-        print(f"\n🚨 [손절] 총 수익률 {current_pl:.2%} → 전량 매도!")
+        print(f"\n🚨 [전체 손절] 총 수익률 {current_pl:.2%} → 전량 매도!")
         for market in list(state["holdings"].keys()):
             if state["holdings"][market]["qty"] > 0:
-                state, _ = execute_sell_sim(state, market, f"손절 (총 {current_pl:.2%})")
+                state, _ = execute_sell_sim(state, market, f"전체 손절 (총 {current_pl:.2%})")
         save_state(state)
         log_performance(state)
         return
+
+    # action.json 아카이브 (관망 포함)
+    archive_dir = BASE_DIR / "action_history"
+    archive_dir.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    (archive_dir / f"action_{ts}.json").write_text(
+        json.dumps(action_data, ensure_ascii=False, indent=2)
+    )
+    # 전날 이전 JSON 자동 압축
+    _compress_old_actions(archive_dir)
 
     actions = action_data.get("actions", [])
     if not actions:
@@ -305,14 +375,6 @@ def execute():
 
     save_state(state)
     log_performance(state)
-
-    # action.json 처리 완료 후 아카이브
-    archive_dir = BASE_DIR / "action_history"
-    archive_dir.mkdir(exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    (archive_dir / f"action_{ts}.json").write_text(
-        json.dumps(action_data, ensure_ascii=False, indent=2)
-    )
 
 
 if __name__ == "__main__":
