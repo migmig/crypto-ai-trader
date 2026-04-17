@@ -129,6 +129,14 @@ export interface PerfRecord {
   num_holdings: string
 }
 
+export interface CycleLog {
+  timestamp: string
+  status: 'ok' | 'error' | 'running'
+  tags: string[]
+  body: string
+  line_count: number
+}
+
 export interface Judgment {
   timestamp: string
   source?: string

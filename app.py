@@ -227,5 +227,86 @@ def api_judgments():
     return jsonify(results)
 
 
+@app.route("/api/logs")
+def api_logs():
+    """사이클 로그 조회 (cron.log + 압축 아카이브)"""
+    import gzip as gz
+    logs_dir = BASE_DIR / "logs"
+    lines = []
+
+    # 1) 현재 cron.log
+    current = logs_dir / "cron.log"
+    if current.exists():
+        try:
+            lines.extend(current.read_text(errors="replace").splitlines())
+        except Exception:
+            pass
+
+    # 2) gz 아카이브 (최근 3개)
+    if len(lines) < 2000:
+        archives = sorted(logs_dir.glob("cron_*.log.gz"), reverse=True)[:3]
+        for arc in archives:
+            try:
+                with gz.open(arc, "rt", errors="replace") as f:
+                    lines = f.read().splitlines() + lines
+            except Exception:
+                continue
+
+    # 사이클 단위로 파싱
+    cycles = []
+    current_cycle = None
+    for line in lines:
+        if "사이클 시작:" in line:
+            current_cycle = {"lines": [line], "timestamp": "", "status": "running"}
+            # "AI 트레이더 사이클 시작: 2026-04-17 21:09:00"
+            parts = line.split("사이클 시작:")
+            if len(parts) > 1:
+                current_cycle["timestamp"] = parts[1].strip()
+        elif current_cycle is not None:
+            current_cycle["lines"].append(line)
+            if "사이클 완료:" in line:
+                current_cycle["status"] = "ok"
+                cycles.append(current_cycle)
+                current_cycle = None
+            elif "[ERROR]" in line or "Traceback" in line:
+                current_cycle["status"] = "error"
+
+    if current_cycle:
+        cycles.append(current_cycle)
+
+    # 최신순 200개, 각 사이클 본문은 결합
+    cycles.reverse()
+    result = []
+    for c in cycles[:200]:
+        # 요약 추출
+        has_ai = any("Step 4: AI" in l for l in c["lines"])
+        has_action = any("[SIM 매수]" in l or "[SIM 매도]" in l for l in c["lines"])
+        has_hold = any("관망" in l for l in c["lines"])
+        has_trailing = any("트레일링 손절" in l for l in c["lines"])
+        has_stop = any("전체 손절" in l or "손절" in l for l in c["lines"] if "트레일링" not in l)
+
+        tags = []
+        if has_ai: tags.append("AI")
+        if has_action: tags.append("TRADE")
+        if has_trailing: tags.append("TRAILING")
+        if has_stop: tags.append("STOPLOSS")
+        if has_hold and not has_action: tags.append("HOLD")
+
+        result.append({
+            "timestamp": c["timestamp"],
+            "status": c["status"],
+            "tags": tags,
+            "body": "\n".join(c["lines"]),
+            "line_count": len(c["lines"]),
+        })
+
+    return jsonify(result)
+
+
+@app.route("/logs")
+def logs_page():
+    return send_from_directory(str(DIST_DIR), "index.html")
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=False)

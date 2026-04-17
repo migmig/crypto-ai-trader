@@ -2,10 +2,11 @@ import { Routes, Route, NavLink } from 'react-router-dom'
 import { useApi } from './hooks/useApi'
 import Dashboard from './pages/Dashboard'
 import HistoryPage from './pages/HistoryPage'
+import LogsPage from './pages/LogsPage'
 import { timeAgo } from './utils'
 
 export default function App() {
-  const { status, trades, performance, judgments, loading, refresh } = useApi(30000)
+  const { status, trades, performance, judgments, logs, loading, refresh } = useApi(30000)
 
   if (loading || !status) {
     return (
@@ -53,6 +54,23 @@ export default function App() {
                 </span>
               )}
             </NavLink>
+            <NavLink
+              to="/logs"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                }`
+              }
+            >
+              Logs
+              {logs.some((l) => l.status === 'error') && (
+                <span className="ml-1.5 bg-red-700 text-red-200 text-[10px] px-1.5 py-0.5 rounded-full">
+                  !
+                </span>
+              )}
+            </NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -86,6 +104,10 @@ export default function App() {
         <Route
           path="/history"
           element={<HistoryPage judgments={judgments} />}
+        />
+        <Route
+          path="/logs"
+          element={<LogsPage logs={logs} />}
         />
       </Routes>
     </div>

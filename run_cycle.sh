@@ -19,6 +19,14 @@ export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 PYTHON="$(dirname "$0")/venv/bin/python3"
 
+# 로그 로테이션: 500KB 초과 시 일자별 gz 압축 후 리셋 (최근 7일 보관)
+LOG_FILE="logs/cron.log"
+if [ -f "$LOG_FILE" ] && [ "$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null)" -gt 512000 ]; then
+  gzip -c "$LOG_FILE" > "logs/cron_$(date '+%Y%m%d_%H%M%S').log.gz"
+  : > "$LOG_FILE"
+  find logs -name 'cron_*.log.gz' -mtime +7 -delete 2>/dev/null || true
+fi
+
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 echo ""
 echo "══════════════════════════════════════════"
