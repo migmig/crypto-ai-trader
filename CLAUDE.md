@@ -5,6 +5,15 @@
 현재는 **시뮬레이션 모드**로 운영한다. 실제 주문은 나가지 않고, 샀다치고/팔았다치고 계산한다.
 나중에 실전 전환 시 executor.py의 `LIVE_MODE = True`로 변경하면 된다.
 
+## 대상 코인
+업비트 원화 마켓 4종으로 제한한다:
+- **KRW-BTC** (비트코인)
+- **KRW-ETH** (이더리움)
+- **KRW-XRP** (리플)
+- **KRW-ADA** (에이다)
+
+대상 코인 목록은 `config.json`의 `markets` 필드에서 관리한다. 코인을 추가/제거하려면 해당 필드만 수정하면 된다.
+
 ## 프로젝트 구조
 
 ```
@@ -17,14 +26,14 @@ crypto-ai-trader/
 ├── collector.py           ← 시장 데이터 수집 (pyupbit)
 ├── analyzer.py            ← 기술지표 계산 (RSI, MACD, 볼린저밴드 등)
 ├── executor.py            ← 매매 실행 (시뮬/실전 모드 전환 가능)
-├── run_cycle.sh           ← 1사이클 실행 스크립트 (크론용)
+├── run_cycle.sh           ← 1사이클 실행 스크립트 (launchd가 5분마다 호출)
 └── market_data/           ← 수집된 시장 데이터 저장
     └── latest.json
 ```
 
 ## 실행 흐름
 
-1. `run_cycle.sh` 실행 (크론으로 5분마다)
+1. `run_cycle.sh` 실행 (macOS **launchd**로 5분(300초)마다 자동 실행)
 2. `collector.py` → 시장 데이터 수집 → `market_data/latest.json`
 3. `analyzer.py` → 기술지표 계산 → `market_data/latest.json`에 추가
 4. Claude Code 호출 → 이 CLAUDE.md + latest.json + state.json 읽고 판단
@@ -125,10 +134,35 @@ CLAUDE.md의 규칙에 따라 매매 판단을 내려줘.
 python3 executor.py
 ```
 
-## 크론 설정 (5분마다)
+## 자동 실행 (macOS launchd)
 
+cron 대신 macOS 네이티브 스케줄러인 **launchd**를 사용한다.
+`~/Library/LaunchAgents/` 하위에 두 개의 plist가 설치되어 있다:
+
+| Label | 역할 | 실행 주기 |
+|---|---|---|
+| `com.migmig.crypto-trader-cycle` | 5분마다 `run_cycle.sh` 실행 (데이터 수집 → AI 판단 → 매매) | `StartInterval` 300초 |
+| `com.migmig.crypto-trader-dashboard` | Flask 대시보드(`app.py`) 상주 실행 | `KeepAlive` true |
+
+plist 경로:
+- `~/Library/LaunchAgents/com.migmig.crypto-trader-cycle.plist`
+- `~/Library/LaunchAgents/com.migmig.crypto-trader-dashboard.plist`
+
+### 자주 쓰는 명령어
 ```bash
-*/5 * * * * cd ~/crypto-ai-trader && bash run_cycle.sh >> logs/cron.log 2>&1
+# 상태 확인
+launchctl list | grep crypto-trader
+
+# 재시작
+launchctl unload ~/Library/LaunchAgents/com.migmig.crypto-trader-cycle.plist
+launchctl load   ~/Library/LaunchAgents/com.migmig.crypto-trader-cycle.plist
+
+# 즉시 1회 실행
+launchctl start com.migmig.crypto-trader-cycle
+
+# 로그
+tail -f logs/cron.log       # 사이클 로그 (기존 이름 유지)
+tail -f logs/dashboard.log  # 대시보드 로그
 ```
 
 ## 성과 측정
@@ -141,3 +175,4 @@ python3 executor.py
 - **슬리피지**: 시뮬에서는 현재가 기준으로 체결 가정. 실전에서는 호가 기반 계산 필요.
 - **수수료**: 업비트 기준 0.05% 적용 (매수/매도 각각).
 - **API 비용**: Claude API 호출당 비용 발생. 5분 간격 = 하루 ~288회.
+- **대상 코인 범위**: 4종(BTC/ETH/XRP/ADA)으로만 분석/매매한다. 그 외 코인은 판단 대상이 아니다.

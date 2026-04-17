@@ -1,6 +1,6 @@
 {
   "initial_capital": 10000000,
-  "markets": ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-SOL", "KRW-DOGE"],
+  "markets": ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-ADA"],
   "mode": "simulation",
   "cycle_interval_minutes": 5,
   "fee_rate": 0.0005,

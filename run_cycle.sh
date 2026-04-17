@@ -1,13 +1,14 @@
 #!/bin/bash
 # 크립토 AI 트레이더 - 1사이클 실행
-# 크론: */5 * * * * cd ~/crypto-ai-trader && bash run_cycle.sh >> logs/cron.log 2>&1
+# launchd (com.migmig.crypto-trader-cycle): StartInterval 300초(5분) 주기로 실행됨
 
 set -e
 cd "$(dirname "$0")"
 mkdir -p logs market_data action_history
 
-# PATH 설정 (크론 환경용)
+# PATH 설정 (launchd 환경용)
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 
 # 가상환경 Python 사용
 PYTHON="$(dirname "$0")/venv/bin/python3"

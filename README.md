@@ -2,6 +2,15 @@
 
 Claude Code를 AI 투자 판단 엔진으로 사용하는 암호화폐 자동매매 시뮬레이터.
 
+## 대상 코인 (4종)
+
+- KRW-BTC (비트코인)
+- KRW-ETH (이더리움)
+- KRW-XRP (리플)
+- KRW-ADA (에이다)
+
+> 대상 코인 조정은 `config.json`의 `markets` 필드를 수정하면 된다.
+
 ## 빠른 시작
 
 ```bash
@@ -9,7 +18,7 @@ Claude Code를 AI 투자 판단 엔진으로 사용하는 암호화폐 자동매
 pip install pyupbit --break-system-packages
 
 # 2. 수동 1사이클 실행
-cd ~/crypto-ai-trader
+cd ~/pywork/crypto-ai-trader
 python3 collector.py        # 데이터 수집
 python3 analyzer.py         # 지표 계산
 # Claude Code가 판단
@@ -18,11 +27,33 @@ python3 executor.py         # 시뮬레이션 매매 실행
 
 # 3. 또는 한방에 실행
 bash run_cycle.sh
+```
 
-# 4. 자동화 (5분마다)
-crontab -e
-# 아래 줄 추가:
-# */5 * * * * cd ~/crypto-ai-trader && bash run_cycle.sh >> logs/cron.log 2>&1
+## 자동 실행 (macOS launchd)
+
+cron이 아닌 **launchd**로 5분마다 사이클을 실행하고, 대시보드를 상주시킨다.
+
+| Label | 역할 | 주기 |
+|---|---|---|
+| `com.migmig.crypto-trader-cycle` | 5분마다 `run_cycle.sh` 실행 | `StartInterval` 300초 |
+| `com.migmig.crypto-trader-dashboard` | Flask 대시보드(`app.py`) 상주 | `KeepAlive` true |
+
+plist 위치: `~/Library/LaunchAgents/com.migmig.crypto-trader-*.plist`
+
+```bash
+# 상태 확인
+launchctl list | grep crypto-trader
+
+# 재시작 (설정 바꾼 뒤)
+launchctl unload ~/Library/LaunchAgents/com.migmig.crypto-trader-cycle.plist
+launchctl load   ~/Library/LaunchAgents/com.migmig.crypto-trader-cycle.plist
+
+# 즉시 1회 실행
+launchctl start com.migmig.crypto-trader-cycle
+
+# 로그
+tail -f logs/cron.log       # 사이클 로그
+tail -f logs/dashboard.log  # 대시보드 로그
 ```
 
 ## 파일 구조
