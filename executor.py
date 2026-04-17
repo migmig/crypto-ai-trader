@@ -324,6 +324,14 @@ def execute():
     (archive_dir / f"action_{ts}.json").write_text(
         json.dumps(action_data, ensure_ascii=False, indent=2)
     )
+
+    # SQLite 히스토리에도 저장 (실패해도 사이클 진행)
+    try:
+        from history_db import insert_judgment
+        insert_judgment(action_data)
+    except Exception as e:
+        print(f"  [WARN] history_db 저장 실패: {e}")
+
     # 전날 이전 JSON 자동 압축
     _compress_old_actions(archive_dir)
 

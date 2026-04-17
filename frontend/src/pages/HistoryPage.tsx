@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   fmt,
@@ -16,14 +16,39 @@ import type {
 
 interface Props {
   judgments: Judgment[]
+  total?: number
+  hasMore?: boolean
+  onLoadMore?: () => void | Promise<void>
 }
 
 type FilterSource = 'all' | 'ai' | 'algo'
 type FilterSignal = 'all' | 'has_action' | 'hold_only'
 
-export default function HistoryPage({ judgments }: Props) {
+export default function HistoryPage({ judgments, total, hasMore, onLoadMore }: Props) {
   const [searchParams] = useSearchParams()
   const highlightTs = searchParams.get('ts')
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const loadingRef = useRef(false)
+
+  // IntersectionObserver: 하단 sentinel이 보이면 더 불러오기
+  useEffect(() => {
+    if (!hasMore || !onLoadMore) return
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !loadingRef.current) {
+          loadingRef.current = true
+          Promise.resolve(onLoadMore()).finally(() => {
+            loadingRef.current = false
+          })
+        }
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, onLoadMore, judgments.length])
 
   const [srcFilter, setSrcFilter] = useState<FilterSource>('all')
   const [sigFilter, setSigFilter] = useState<FilterSignal>('all')
@@ -45,17 +70,22 @@ export default function HistoryPage({ judgments }: Props) {
     })
   }, [judgments, srcFilter, sigFilter])
 
-  // Stats
-  const totalCount = judgments.length
+  // Stats (현재 로드된 기준)
+  const loadedCount = judgments.length
   const aiCount = judgments.filter((j) => j.source === 'ai').length
-  const algoCount = totalCount - aiCount
+  const algoCount = loadedCount - aiCount
   const actionCount = judgments.filter((j) => j.actions?.length > 0).length
+  const serverTotal = total ?? loadedCount
 
   return (
     <main className="max-w-6xl mx-auto p-5 space-y-5">
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Total Judgments" value={totalCount} />
+        <StatCard
+          label="Total Judgments"
+          value={serverTotal}
+          subtext={loadedCount < serverTotal ? `loaded ${loadedCount}` : undefined}
+        />
         <StatCard label="AI Calls" value={aiCount} accent="purple" />
         <StatCard label="Algo Only" value={algoCount} accent="slate" />
         <StatCard label="With Actions" value={actionCount} accent="emerald" />
@@ -95,7 +125,7 @@ export default function HistoryPage({ judgments }: Props) {
           ))}
         </div>
         <span className="text-xs text-gray-500 ml-auto">
-          {filtered.length} / {totalCount}
+          {filtered.length} / {loadedCount}
         </span>
       </div>
 
@@ -121,12 +151,27 @@ export default function HistoryPage({ judgments }: Props) {
             )
           })
         )}
+
+        {/* 무한 스크롤 트리거 */}
+        {hasMore && (
+          <div ref={sentinelRef} className="py-6 text-center">
+            <div className="inline-flex items-center gap-2 text-xs text-gray-500">
+              <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span>
+              Loading more... ({judgments.length} / {total})
+            </div>
+          </div>
+        )}
+        {!hasMore && judgments.length > 0 && filtered.length > 0 && (
+          <div className="py-6 text-center text-xs text-gray-600">
+            — end of history ({judgments.length} total) —
+          </div>
+        )}
       </div>
     </main>
   )
 }
 
-function StatCard({ label, value, accent = 'blue' }: { label: string; value: number; accent?: string }) {
+function StatCard({ label, value, accent = 'blue', subtext }: { label: string; value: number; accent?: string; subtext?: string }) {
   const colors: Record<string, string> = {
     blue: 'text-blue-400',
     purple: 'text-purple-400',
@@ -137,6 +182,7 @@ function StatCard({ label, value, accent = 'blue' }: { label: string; value: num
     <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
       <div className="text-xs text-gray-500 mb-1">{label}</div>
       <div className={`text-2xl font-bold ${colors[accent]}`}>{value}</div>
+      {subtext && <div className="text-[10px] text-gray-500 mt-0.5">{subtext}</div>}
     </div>
   )
 }

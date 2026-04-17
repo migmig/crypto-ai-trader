@@ -12,3 +12,7 @@ trade_log.csv
 state.json
 *.log
 .DS_Store
+history.db
+history.db-journal
+backtest_report.json
+backtest_trades*.csv

@@ -172,38 +172,62 @@ def classify(market, mdata, state_holding):
 
 
 def build_actions(per_coin_map, state):
-    """신호 → 매매 주문 변환."""
+    """신호 → 매매 주문 변환.
+    매수 금액은 **평가금액(현금+코인) 기준 퍼센트**로 산출하고, 남은 현금을 상한으로 둔다.
+    손실 후에도 매수 규모가 의미 있는 수준으로 유지됨.
+    """
     actions = []
     cash = state.get("cash", 0)
-    max_pct = CONFIG["safety"]["max_single_trade_pct"]
+    holdings = state.get("holdings", {}) or {}
+    # 평가금액 = 현금 + 각 코인 보유평가 (현재가 없으면 평단가로 대체)
+    per_coin_price = {m: pc.get("price") for m, pc in per_coin_map.items()}
+    equity = cash + sum(
+        (per_coin_price.get(m) or h.get("avg_price", 0)) * h.get("qty", 0)
+        for m, h in holdings.items()
+    )
+    max_pct = CONFIG["safety"]["max_single_trade_pct"]  # 0.30
+    buy_pct = 0.10
 
+    # 공평한 현금 배분을 위해 buy/buy_strong 코인 리스트 먼저 수집
+    buy_orders = []
+    sell_orders = []
     for market, pc in per_coin_map.items():
         sig = pc["signal"]
         note = _short_note(pc)
         if sig == "buy_strong":
-            amt = int(cash * max_pct)
-            if amt > 0:
-                actions.append({
-                    "action": "buy", "market": market, "amount_krw": amt,
-                    "reason": f"[ALGO] 적극매수 - {note}",
-                })
+            buy_orders.append((market, sig, max_pct, note))
         elif sig == "buy":
-            amt = int(cash * 0.10)
-            if amt > 0:
-                actions.append({
-                    "action": "buy", "market": market, "amount_krw": amt,
-                    "reason": f"[ALGO] 소량매수 - {note}",
-                })
+            buy_orders.append((market, sig, buy_pct, note))
         elif sig == "sell_strong":
-            actions.append({
+            sell_orders.append({
                 "action": "sell", "market": market, "sell_pct": 1.0,
                 "reason": f"[ALGO] 적극매도 - {note}",
             })
         elif sig == "sell":
-            actions.append({
+            sell_orders.append({
                 "action": "sell", "market": market, "sell_pct": 0.5,
                 "reason": f"[ALGO] 부분매도 - {note}",
             })
+
+    # 매수: 평가금액 × 비율, 남은 현금을 여러 주문이 나눠쓰도록 공평 분배
+    remaining_cash = cash
+    total_demand = sum(int(equity * p) for _, _, p, _ in buy_orders)
+    for market, sig, pct, note in buy_orders:
+        target = int(equity * pct)
+        # 동시에 여러 매수 신호가 있고 현금이 부족하면 비율대로 분할
+        if total_demand > cash and total_demand > 0:
+            target = int(target * cash / total_demand)
+        amt = min(target, remaining_cash)
+        if amt < 5000:  # 최소 주문 금액
+            continue
+        label = "적극매수" if sig == "buy_strong" else "소량매수"
+        actions.append({
+            "action": "buy", "market": market, "amount_krw": amt,
+            "reason": f"[ALGO] {label} - {note}",
+        })
+        remaining_cash -= amt
+
+    actions.extend(sell_orders)
     return actions
 
 

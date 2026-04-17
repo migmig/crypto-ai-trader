@@ -178,53 +178,32 @@ def api_performance():
 
 @app.route("/api/judgments")
 def api_judgments():
-    """AI 판단 히스토리 (action_history/ — JSON + tar.gz 아카이브)"""
-    import tarfile, io
-    history_dir = BASE_DIR / "action_history"
-    if not history_dir.exists():
-        return jsonify([])
+    """AI 판단 히스토리. SQLite 기반.
+    쿼리 파라미터:
+      offset, limit — 페이지네이션
+      source — 'ai' | 'algo' (선택)
+      filter — 'has_action' | 'hold_only' (선택)
+      since, until — ISO timestamp 범위 (선택)
+    """
+    from flask import request
+    from history_db import query_judgments
+    offset = max(0, int(request.args.get("offset", 0)))
+    limit = min(500, max(1, int(request.args.get("limit", 50))))
+    source = request.args.get("source")
+    f = request.args.get("filter")
+    since = request.args.get("since")
+    until = request.args.get("until")
 
-    results = []
-
-    def _parse(data):
-        return {
-            "timestamp": data.get("timestamp", ""),
-            "source": data.get("source", ""),
-            "actions": data.get("actions", []),
-            "market_summary": data.get("market_summary", ""),
-            "risk_assessment": data.get("risk_assessment", ""),
-            "per_coin": data.get("per_coin", {}),
-            "conditions_checked": data.get("conditions_checked", []),
-            "triggers_next_cycle": data.get("triggers_next_cycle", []),
-        }
-
-    # 1) 개별 JSON (최신 — 아직 압축 안 된 것)
-    for f in sorted(history_dir.glob("action_*.json"), reverse=True)[:50]:
-        try:
-            results.append(_parse(json.loads(f.read_text())))
-        except Exception:
-            continue
-
-    # 2) tar.gz 아카이브 (일별 압축분, 최근 3일치만)
-    if len(results) < 50:
-        remain = 50 - len(results)
-        archives = sorted(history_dir.glob("archive_*.tar.gz"), reverse=True)[:3]
-        for arc in archives:
-            try:
-                with tarfile.open(arc, "r:gz") as tf:
-                    members = sorted(tf.getnames(), reverse=True)
-                    for name in members[:remain]:
-                        data = json.loads(tf.extractfile(name).read())
-                        results.append(_parse(data))
-                        remain -= 1
-                        if remain <= 0:
-                            break
-            except Exception:
-                continue
-            if remain <= 0:
-                break
-
-    return jsonify(results)
+    result = query_judgments(
+        offset=offset,
+        limit=limit,
+        source=source if source in ("ai", "algo") else None,
+        actions_only=(f == "has_action"),
+        hold_only=(f == "hold_only"),
+        since=since,
+        until=until,
+    )
+    return jsonify(result)
 
 
 @app.route("/api/logs")

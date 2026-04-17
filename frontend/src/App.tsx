@@ -6,7 +6,10 @@ import LogsPage from './pages/LogsPage'
 import { timeAgo } from './utils'
 
 export default function App() {
-  const { status, trades, performance, judgments, logs, loading, refresh } = useApi(30000)
+  const {
+    status, trades, performance, judgments, logs, loading, refresh,
+    judgmentsTotal, judgmentsHasMore, loadMoreJudgments,
+  } = useApi(30000)
 
   if (loading || !status) {
     return (
@@ -103,7 +106,14 @@ export default function App() {
         />
         <Route
           path="/history"
-          element={<HistoryPage judgments={judgments} />}
+          element={
+            <HistoryPage
+              judgments={judgments}
+              total={judgmentsTotal}
+              hasMore={judgmentsHasMore}
+              onLoadMore={loadMoreJudgments}
+            />
+          }
         />
         <Route
           path="/logs"

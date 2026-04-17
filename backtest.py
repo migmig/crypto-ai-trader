@@ -241,7 +241,8 @@ def run_sim(history, ts_index, common_ts, start_idx, rule_set, rsi1d_lookup,
                     if price * qty > equity * SAFE["max_single_coin_pct"]:
                         continue
                 pct = SAFE["max_single_trade_pct"] if signal == "buy_strong" else 0.10
-                amount = cash * pct
+                # 평가금액(equity) 기준, 현금 상한
+                amount = min(equity * pct, cash)
                 if amount < 5000:
                     continue
                 buy_qty = amount / price * (1 - FEE)
