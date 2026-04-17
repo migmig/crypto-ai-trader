@@ -6,13 +6,17 @@
 나중에 실전 전환 시 executor.py의 `LIVE_MODE = True`로 변경하면 된다.
 
 ## 대상 코인
-업비트 원화 마켓 4종으로 제한한다:
-- **KRW-BTC** (비트코인)
-- **KRW-ETH** (이더리움)
-- **KRW-XRP** (리플)
-- **KRW-ADA** (에이다)
+업비트 원화 마켓 10종:
 
-대상 코인 목록은 `config.json`의 `markets` 필드에서 관리한다. 코인을 추가/제거하려면 해당 필드만 수정하면 된다.
+| 티커 | 이름 | 티커 | 이름 |
+|---|---|---|---|
+| KRW-BTC | 비트코인 | KRW-DOGE | 도지코인 |
+| KRW-ETH | 이더리움 | KRW-AVAX | 아발란체 |
+| KRW-XRP | 리플 | KRW-LINK | 체인링크 |
+| KRW-ADA | 에이다 | KRW-DOT | 폴카닷 |
+| KRW-SOL | 솔라나 | KRW-SUI | 수이 |
+
+대상 코인 목록은 `config.json`의 `markets` 필드에서 관리한다. 하이브리드 구조 덕분에 AI 비용 부담 없이 코인을 추가/제거할 수 있다 (알고리즘이 각 코인을 평가하고, non-hold 신호가 나올 때만 AI 호출).
 
 ## 프로젝트 구조
 
@@ -236,5 +240,5 @@ tail -f logs/dashboard.log  # 대시보드 로그
 - **슬리피지**: 시뮬에서는 현재가 기준으로 체결 가정. 실전에서는 호가 기반 계산 필요.
 - **수수료**: 업비트 기준 0.05% 적용 (매수/매도 각각).
 - **API 비용**: 하이브리드 전환으로 non-hold 신호가 있을 때만 Claude 호출. 전 종목 hold면 0회. 2분 주기여도 실제 AI 호출은 변동성 있는 시점에 집중됨.
-- **대상 코인 범위**: 4종(BTC/ETH/XRP/ADA)으로만 분석/매매한다. 그 외 코인은 판단 대상이 아니다.
+- **대상 코인 범위**: 10종(BTC/ETH/XRP/ADA/SOL/DOGE/AVAX/LINK/DOT/SUI). `config.json`의 `markets` 배열로 조정.
 - **매수 후 최소 홀딩 30분**: `run_cycle.sh` 주기(2분)보다 길다. executor.py의 안전장치가 매매를 거부한다.

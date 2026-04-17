@@ -2,14 +2,11 @@
 
 Claude Code를 AI 투자 판단 엔진으로 사용하는 암호화폐 자동매매 시뮬레이터.
 
-## 대상 코인 (4종)
+## 대상 코인 (10종)
 
-- KRW-BTC (비트코인)
-- KRW-ETH (이더리움)
-- KRW-XRP (리플)
-- KRW-ADA (에이다)
+BTC · ETH · XRP · ADA · SOL · DOGE · AVAX · LINK · DOT · SUI
 
-> 대상 코인 조정은 `config.json`의 `markets` 필드를 수정하면 된다.
+> 하이브리드 구조(알고리즘이 규칙 평가, non-hold 신호에만 AI 호출) 덕에 코인 수를 늘려도 AI 비용이 선형 증가하지 않는다. `config.json`의 `markets` 배열로 조정.
 
 ## 빠른 시작
 
