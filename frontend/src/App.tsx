@@ -142,6 +142,7 @@ export default function App() {
             <ChartsPage
               performance={performance}
               markets={status.markets.map((m) => m.market)}
+              heldMarkets={status.holdings.map((h) => h.market)}
             />
           }
         />

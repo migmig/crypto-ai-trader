@@ -10,11 +10,18 @@ import { fmt } from '../utils'
 interface Props {
   performance: PerfRecord[]
   markets: string[]
+  heldMarkets: string[]
 }
 
 type Tab = 'portfolio' | 'coin'
+type CoinMode = 'single' | 'compare'
 type Range = '1h' | '6h' | '1d' | '3d' | '1w' | '1m' | 'all'
 type CoinInterval = 'minute15' | 'minute30' | 'minute60' | 'minute240' | 'day'
+
+const COMPARE_COLORS = [
+  '#60a5fa', '#f59e0b', '#10b981', '#ef4444', '#a78bfa',
+  '#ec4899', '#14b8a6', '#f97316', '#84cc16', '#06b6d4',
+]
 
 const RANGE_MINUTES: Record<Range, number> = {
   '1h': 60,
@@ -34,7 +41,7 @@ const COIN_INTERVAL_LABEL: Record<CoinInterval, string> = {
   day: '일봉',
 }
 
-export default function ChartsPage({ performance, markets }: Props) {
+export default function ChartsPage({ performance, markets, heldMarkets }: Props) {
   const [searchParams] = useSearchParams()
   const coinParam = searchParams.get('coin')
   const [tab, setTab] = useState<Tab>(coinParam ? 'coin' : 'portfolio')
@@ -53,7 +60,11 @@ export default function ChartsPage({ performance, markets }: Props) {
       {tab === 'portfolio' ? (
         <PortfolioChart data={performance} />
       ) : (
-        <CoinChartView markets={markets} initialMarket={coinParam || undefined} />
+        <CoinChartView
+          markets={markets}
+          heldMarkets={heldMarkets}
+          initialMarket={coinParam || undefined}
+        />
       )}
     </main>
   )
@@ -189,58 +200,64 @@ function ModeBtn({ label, active, onClick }: { label: string; active: boolean; o
 }
 
 // ────────────────────────────────────────────
-// Per-coin (단순 종가 라인)
+// Per-coin (단순 종가 라인 or 비교 모드)
 // ────────────────────────────────────────────
-function CoinChartView({ markets, initialMarket }: { markets: string[]; initialMarket?: string }) {
+function CoinChartView({
+  markets,
+  heldMarkets,
+  initialMarket,
+}: {
+  markets: string[]
+  heldMarkets: string[]
+  initialMarket?: string
+}) {
+  const [mode, setMode] = useState<CoinMode>('single')
   const [selected, setSelected] = useState(initialMarket || markets[0] || 'KRW-BTC')
+  const [intv, setIntv] = useState<CoinInterval>('minute60')
+  const [count, setCount] = useState(200)
 
   useEffect(() => {
     if (initialMarket && initialMarket !== selected) setSelected(initialMarket)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMarket])
-  const [intv, setIntv] = useState<CoinInterval>('minute60')
-  const [count, setCount] = useState(200)
-  const [data, setData] = useState<CoinChart | null>(null)
-  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    fetch(`/api/chart/coin/${selected}?interval=${intv}&count=${count}`)
-      .then((r) => r.json())
-      .then((d: CoinChart) => {
-        if (!cancelled) setData(d)
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [selected, intv, count])
+  const canCompare = heldMarkets.length > 0
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 font-semibold">COIN</span>
-          <div className="flex flex-wrap gap-1">
-            {markets.map((m) => (
-              <button
-                key={m}
-                onClick={() => setSelected(m)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
-                  selected === m
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200'
-                }`}
-              >
-                {m.replace('KRW-', '')}
-              </button>
-            ))}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 font-semibold">MODE</span>
+          <div className="flex gap-1">
+            <ModeBtn label="단일" active={mode === 'single'} onClick={() => setMode('single')} />
+            <ModeBtn
+              label={`비교 (보유${canCompare ? ` ${heldMarkets.length}` : ''})`}
+              active={mode === 'compare'}
+              onClick={() => canCompare && setMode('compare')}
+            />
           </div>
         </div>
+
+        {mode === 'single' && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500 font-semibold">COIN</span>
+            <div className="flex flex-wrap gap-1">
+              {markets.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setSelected(m)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+                    selected === m
+                      ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                      : 'bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200'
+                  }`}
+                >
+                  {m.replace('KRW-', '')}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
           <span className="text-xs text-gray-500 font-semibold">INTERVAL</span>
@@ -279,13 +296,227 @@ function CoinChartView({ markets, initialMarket }: { markets: string[]; initialM
         </div>
       </div>
 
+      {mode === 'single' ? (
+        <SingleCoinChart market={selected} interval={intv} count={count} />
+      ) : (
+        <CompareCoinsChart heldMarkets={heldMarkets} interval={intv} count={count} />
+      )}
+    </div>
+  )
+}
+
+function SingleCoinChart({
+  market,
+  interval,
+  count,
+}: {
+  market: string
+  interval: CoinInterval
+  count: number
+}) {
+  const [data, setData] = useState<CoinChart | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/chart/coin/${market}?interval=${interval}&count=${count}`)
+      .then((r) => r.json())
+      .then((d: CoinChart) => {
+        if (!cancelled) setData(d)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [market, interval, count])
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      {loading && !data ? (
+        <div className="py-16 text-center text-sm text-gray-500">Loading...</div>
+      ) : !data || data.candles.length === 0 ? (
+        <div className="py-16 text-center text-sm text-gray-500">No candle data</div>
+      ) : (
+        <PriceChart data={data} />
+      )}
+    </div>
+  )
+}
+
+function CompareCoinsChart({
+  heldMarkets,
+  interval,
+  count,
+}: {
+  heldMarkets: string[]
+  interval: CoinInterval
+  count: number
+}) {
+  const [selected, setSelected] = useState<string[]>(heldMarkets)
+  const [series, setSeries] = useState<Record<string, { t: number; c: number }[]>>({})
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setSelected((prev) => {
+      const filtered = prev.filter((m) => heldMarkets.includes(m))
+      return filtered.length ? filtered : heldMarkets
+    })
+  }, [heldMarkets])
+
+  useEffect(() => {
+    let cancelled = false
+    if (selected.length === 0) {
+      setSeries({})
+      return
+    }
+    setLoading(true)
+    Promise.all(
+      selected.map((m) =>
+        fetch(`/api/chart/coin/${m}?interval=${interval}&count=${count}`)
+          .then((r) => r.json())
+          .then((d: CoinChart) => [m, d.candles.map((c) => ({ t: new Date(c.t).getTime(), c: c.c }))] as const)
+          .catch(() => [m, []] as const),
+      ),
+    )
+      .then((pairs) => {
+        if (cancelled) return
+        setSeries(Object.fromEntries(pairs))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected, interval, count])
+
+  const toggle = (m: string) => {
+    setSelected((prev) =>
+      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m],
+    )
+  }
+
+  // 모든 타임스탬프 합집합 → 정규화 % 변동률로 병합
+  const { merged, firstClose } = useMemo(() => {
+    const firstCloseMap: Record<string, number> = {}
+    const rows: Record<number, Record<string, number>> = {}
+    for (const m of selected) {
+      const candles = series[m] || []
+      if (!candles.length) continue
+      firstCloseMap[m] = candles[0].c
+      for (const c of candles) {
+        const pct = (c.c / candles[0].c - 1) * 100
+        if (!rows[c.t]) rows[c.t] = { t: c.t } as any
+        rows[c.t][m] = Number(pct.toFixed(3))
+      }
+    }
+    const merged = Object.values(rows).sort((a: any, b: any) => a.t - b.t)
+    return { merged, firstClose: firstCloseMap }
+  }, [series, selected])
+
+  const chartRange: Range = useMemo(() => {
+    // 대략적인 x축 포맷 힌트
+    if (interval === 'day') return '1m'
+    if (interval === 'minute240') return '1w'
+    if (interval === 'minute60') return '3d'
+    return '1d'
+  }, [interval])
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-4 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-gray-500 font-semibold">HOLDINGS</span>
+        {heldMarkets.map((m) => {
+          const idx = heldMarkets.indexOf(m)
+          const color = COMPARE_COLORS[idx % COMPARE_COLORS.length]
+          const active = selected.includes(m)
+          return (
+            <button
+              key={m}
+              onClick={() => toggle(m)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer border ${
+                active ? 'text-gray-100' : 'bg-gray-800 text-gray-500 border-gray-700 hover:text-gray-300'
+              }`}
+              style={active ? { borderColor: color, background: `${color}22` } : undefined}
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                style={{ background: active ? color : '#4b5563' }}
+              />
+              {m.replace('KRW-', '')}
+            </button>
+          )
+        })}
+      </div>
+
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-        {loading && !data ? (
+        <div className="mb-3">
+          <h2 className="text-base font-semibold">보유 코인 비교 (% 변동률)</h2>
+          <div className="text-xs text-gray-500 mt-0.5">
+            시작 시점 종가를 0%로 정규화 · {merged.length} points · {COIN_INTERVAL_LABEL[interval]}
+          </div>
+        </div>
+
+        {loading && merged.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-500">Loading...</div>
-        ) : !data || data.candles.length === 0 ? (
+        ) : selected.length === 0 ? (
+          <div className="py-16 text-center text-sm text-gray-500">코인을 선택하세요</div>
+        ) : merged.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-500">No candle data</div>
         ) : (
-          <PriceChart data={data} />
+          <ResponsiveContainer width="100%" height={420}>
+            <LineChart data={merged} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+              <XAxis
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={['dataMin', 'dataMax']}
+                tick={{ fill: '#6b7280', fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: any) => formatTick(v, chartRange)}
+              />
+              <YAxis
+                tick={{ fill: '#6b7280', fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: any) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`}
+                domain={['auto', 'auto']}
+              />
+              <Tooltip
+                contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: '#9ca3af' }}
+                labelFormatter={(v: any) => new Date(v).toLocaleString('ko-KR')}
+                formatter={(value: any, name: any) => {
+                  const m = String(name)
+                  const base = firstClose[m]
+                  const price = base !== undefined ? base * (1 + Number(value) / 100) : undefined
+                  const priceStr = price !== undefined ? ` · \u20a9${Math.round(price).toLocaleString()}` : ''
+                  return [`${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(2)}%${priceStr}`, m.replace('KRW-', '')]
+                }}
+              />
+              <ReferenceLine y={0} stroke="#374151" strokeDasharray="4 4" />
+              {selected.map((m) => {
+                const idx = heldMarkets.indexOf(m)
+                return (
+                  <Line
+                    key={m}
+                    type="monotone"
+                    dataKey={m}
+                    stroke={COMPARE_COLORS[idx % COMPARE_COLORS.length]}
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                    connectNulls
+                  />
+                )
+              })}
+            </LineChart>
+          </ResponsiveContainer>
         )}
       </div>
     </div>
