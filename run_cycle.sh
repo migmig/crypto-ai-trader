@@ -1,15 +1,16 @@
 #!/bin/bash
-# 크립토 AI 트레이더 - 1사이클 실행 (하이브리드, 일봉 기반 v5)
+# 크립토 AI 트레이더 - 매매 사이클 (일봉 기반 v5)
 # launchd (com.migmig.crypto-trader-cycle): StartInterval 3600초(1시간) 주기
 #
+# 데이터 수집은 run_collect.sh가 2분마다 처리 (별도 plist).
+# 여기선 매매 신호·AI·실행만 수행. latest.json이 오래됐으면 fallback 수집.
+#
 # 흐름:
-#   1. collector.py   → 시세/캔들/호가 수집
-#   2. analyzer.py    → 기술지표 계산
-#   3. signals.py     → 규칙 기반 신호(buy_strong/buy/hold/sell/sell_strong) 산출
-#                       signals.json 생성. has_non_hold 플래그 포함
-#   4a. has_non_hold=true  → Claude 호출 (signals.json 맥락으로 검증/서술/거부)
-#   4b. has_non_hold=false → signals.json을 action.json으로 복사 (AI 스킵, 비용 0)
-#   5. executor.py    → action.json 집행
+#   1. 데이터 신선도 체크 (fallback: collector+analyzer)
+#   2. signals.py     → 일봉 규칙 기반 신호 → signals.json
+#   3a. has_non_hold=true  → Claude 호출 → action.json
+#   3b. has_non_hold=false → signals.json → action.json 복사 (AI 스킵)
+#   4. executor.py    → action.json 집행
 
 set -e
 cd "$(dirname "$0")"
@@ -30,31 +31,29 @@ fi
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 echo ""
 echo "══════════════════════════════════════════"
-echo "  🤖 AI 트레이더 사이클 시작: $TIMESTAMP"
+echo "  🤖 AI 트레이더 매매 사이클: $TIMESTAMP"
 echo "══════════════════════════════════════════"
 
-# Step 1: 데이터 수집
-echo ""
-echo "📡 Step 1: 시장 데이터 수집"
-$PYTHON collector.py
+# Step 0: 데이터 신선도 체크 — latest.json 없거나 10분 초과면 fallback 수집
+DATA_FILE="market_data/latest.json"
+if [ ! -f "$DATA_FILE" ] || [ "$(( $(date +%s) - $(stat -f%m "$DATA_FILE" 2>/dev/null || stat -c%Y "$DATA_FILE" 2>/dev/null) ))" -gt 600 ]; then
+  echo "📡 Step 0: 데이터 오래됨/없음 → fallback 수집"
+  $PYTHON collector.py
+  $PYTHON analyzer.py
+fi
 
-# Step 2: 기술지표 분석
+# Step 1: 알고리즘 신호
 echo ""
-echo "📊 Step 2: 기술지표 분석"
-$PYTHON analyzer.py
-
-# Step 3: 알고리즘 신호
-echo ""
-echo "🔎 Step 3: 알고리즘 신호 계산"
+echo "🔎 Step 1: 알고리즘 신호 계산 (일봉 기반)"
 $PYTHON signals.py
 
-# Step 4: 분기 — 신호에 따라 AI 호출 여부 결정
+# Step 2: 분기 — 신호에 따라 AI 호출 여부 결정
 HAS_NON_HOLD=$($PYTHON -c "import json; print('1' if json.load(open('signals.json')).get('has_non_hold') else '0')")
 FORCE_AI=$($PYTHON -c "import json; c=json.load(open('config.json')); print('1' if c.get('hybrid',{}).get('always_call_ai') else '0')" 2>/dev/null || echo "0")
 
 if [ "$HAS_NON_HOLD" = "1" ] || [ "$FORCE_AI" = "1" ]; then
   echo ""
-  echo "🧠 Step 4: AI 판단 (has_non_hold=$HAS_NON_HOLD, force=$FORCE_AI)"
+  echo "🧠 Step 2: AI 판단 (has_non_hold=$HAS_NON_HOLD, force=$FORCE_AI)"
   claude -p --model claude-opus-4-7 "
 지금 시각: $TIMESTAMP
 
@@ -95,13 +94,13 @@ state.json에서 현재 보유 현황을 확인한다.
 " --dangerously-skip-permissions
 else
   echo ""
-  echo "💤 Step 4: 전 종목 hold — AI 호출 스킵 (알고리즘 결과 사용)"
+  echo "💤 Step 2: 전 종목 hold — AI 호출 스킵 (알고리즘 결과 사용)"
   cp signals.json action.json
 fi
 
-# Step 5: 매매 실행
+# Step 3: 매매 실행
 echo ""
-echo "💹 Step 5: 매매 실행"
+echo "💹 Step 3: 매매 실행"
 $PYTHON executor.py
 
 echo ""
