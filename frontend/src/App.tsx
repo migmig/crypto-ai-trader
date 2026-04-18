@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import HistoryPage from './pages/HistoryPage'
 import LogsPage from './pages/LogsPage'
 import ChartsPage from './pages/ChartsPage'
+import SimulationsPage from './pages/SimulationsPage'
 import { timeAgo } from './utils'
 
 export default function App() {
@@ -69,6 +70,18 @@ export default function App() {
               }
             >
               Charts
+            </NavLink>
+            <NavLink
+              to="/simulations"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                }`
+              }
+            >
+              Sims
             </NavLink>
             <NavLink
               to="/logs"
@@ -145,6 +158,10 @@ export default function App() {
               heldMarkets={status.holdings.map((h) => h.market)}
             />
           }
+        />
+        <Route
+          path="/simulations"
+          element={<SimulationsPage />}
         />
         <Route
           path="/logs"

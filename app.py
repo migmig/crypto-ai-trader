@@ -333,8 +333,96 @@ def api_logs():
 
 @app.route("/logs")
 @app.route("/charts")
+@app.route("/simulations")
 def spa_fallback():
     return send_from_directory(str(DIST_DIR), "index.html")
+
+
+SIMULATIONS_DIR = BASE_DIR / "simulations"
+
+_SIM_META = [
+    {
+        "id": "01_feb5_position",
+        "title": "2/5 BTC 포지션 추적",
+        "subtitle": "현재 룰이 하락 폭포수에서 어떻게 바닥에 손절하는가",
+        "description": (
+            "2026-02-05 00:00에 BTC ₩1M을 매수한 단일 포지션을 4/18까지 추적. "
+            "각 룰 변형이 이 하나의 하락 사건을 어떻게 처리하는지 비교."
+        ),
+        "chart": None,
+        "note": "현재 룰은 2/6 05:30 백스톱 발동으로 바닥권 매도. F2(익절+완화 백스톱)는 매도 0회로 단순 홀딩 복제.",
+    },
+    {
+        "id": "02_mitigation_variants",
+        "title": "완화안 11종 비교",
+        "subtitle": "같은 포지션에 다양한 룰 적용 — 어느 조합이 효과 있나",
+        "description": (
+            "2/5 포지션에 백스톱 완화 / RSI 유예 / 부분 매도 / 익절 조건을 조합해 11종 룰 테스트. "
+            "이 단계에서 'F2를 도입하면 된다'는 성급한 결론이 나올 뻔했음."
+        ),
+        "chart": "02_mitigation_variants.png",
+        "note": "F시리즈가 홀딩(+2.92%)을 거의 완벽히 복제. 하지만 시뮬 03에서 이 결론이 뒤집힘.",
+    },
+    {
+        "id": "03_multi_horizon",
+        "title": "5개 시간 지평 비교",
+        "subtitle": "단일 시나리오 튜닝의 함정 — 다른 시장 조건에서 뒤집힘",
+        "description": (
+            "30·60·90·120·150일 전 매수 시점에 같은 룰 적용. "
+            "상승장(30/60일)에선 F시리즈 유리, 하락장(90~150일)에선 현재 룰이 -15%로 손실 제한."
+        ),
+        "chart": "03_multi_horizon_avg.png",
+        "note": "현재 룰이 평균 -4.57%로 모든 변형안보다 우수. F2는 하락장에서 -25%까지 풀로 물림.",
+    },
+    {
+        "id": "04_adaptive_sizing",
+        "title": "적응형 매수 사이즈",
+        "subtitle": "룰은 그대로, 신호 빈도에 따라 매수 비율만 조정",
+        "description": (
+            "₩10M 초기 자본 풀 백테스트. 매수 신호 빈도 n(최근 4시간)에 따라 사이즈 배수 조정. "
+            "감쇠 전략 전부 실패, 역발상(빈도↑→사이즈↑)이 유일한 미세 우위."
+        ),
+        "chart": "04_adaptive_sizing.png",
+        "note": "역발상 E가 평균 -0.82%로 승리하지만 현재 대비 +0.21%p로 개선 폭 작음. 실전 도입 전 추가 검증 필요.",
+    },
+]
+
+
+@app.route("/api/simulations")
+def api_simulations_list():
+    """시뮬 목록 + 각 CSV를 JSON으로 변환."""
+    result = []
+    for meta in _SIM_META:
+        csv_path = SIMULATIONS_DIR / "results" / f"{meta['id']}.csv"
+        rows = []
+        if csv_path.exists():
+            with csv_path.open() as f:
+                for row in csv.DictReader(f):
+                    # 숫자 필드 변환 시도
+                    parsed = {}
+                    for k, v in row.items():
+                        try:
+                            parsed[k] = float(v) if v and v.replace(".", "", 1).replace("-", "", 1).isdigit() else v
+                        except Exception:
+                            parsed[k] = v
+                    rows.append(parsed)
+        result.append({**meta, "rows": rows})
+    return jsonify(result)
+
+
+@app.route("/api/simulations/readme")
+def api_simulations_readme():
+    """README.md 원문."""
+    readme = SIMULATIONS_DIR / "README.md"
+    if readme.exists():
+        return readme.read_text(encoding="utf-8"), 200, {"Content-Type": "text/plain; charset=utf-8"}
+    return "", 404
+
+
+@app.route("/simulations/charts/<path:filename>")
+def sim_chart(filename):
+    """차트 PNG 직접 서빙."""
+    return send_from_directory(str(SIMULATIONS_DIR / "charts"), filename)
 
 
 @app.route("/api/chart/coin/<market>")
