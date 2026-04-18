@@ -495,6 +495,7 @@ type job struct {
 func main() {
 	dataDir := flag.String("data", "../data", "캔들 CSV 디렉터리")
 	outPath := flag.String("out", "../results/05_grid_search.csv", "결과 CSV 경로")
+	prefix := flag.String("prefix", "05_grid", "요약 CSV 파일명 prefix (<prefix>_top.csv 등)")
 	flag.Parse()
 
 	tStart := time.Now()
@@ -603,7 +604,7 @@ func main() {
 	log.Printf("saved → %s", *outPath)
 
 	// 3b) 요약 CSV들 생성 (UI 테이블/차트 용)
-	if err := writeSummaries(all, coins, filepath.Dir(*outPath)); err != nil {
+	if err := writeSummaries(all, coins, filepath.Dir(*outPath), *prefix); err != nil {
 		log.Fatalf("summaries: %v", err)
 	}
 
@@ -611,7 +612,7 @@ func main() {
 	printSummary(all, rules, coins)
 }
 
-func writeSummaries(all []Result, coins []loaded, outDir string) error {
+func writeSummaries(all []Result, coins []loaded, outDir, prefix string) error {
 	// 룰별 평균
 	type ruleStat struct {
 		rule  Rule
@@ -643,14 +644,14 @@ func writeSummaries(all []Result, coins []loaded, outDir string) error {
 	sort.Slice(avgs, func(i, j int) bool { return avgs[i].avg > avgs[j].avg })
 
 	// top rules CSV (상위 20)
-	topPath := filepath.Join(outDir, "05_grid_top.csv")
+	topPath := filepath.Join(outDir, prefix+"_top.csv")
 	if err := writeTopRules(topPath, avgs, 20); err != nil {
 		return err
 	}
 	log.Printf("saved → %s", topPath)
 
 	// per-coin 최적 룰 + 홀딩 벤치마크
-	perCoinPath := filepath.Join(outDir, "05_grid_per_coin.csv")
+	perCoinPath := filepath.Join(outDir, prefix+"_per_coin.csv")
 	if err := writePerCoin(perCoinPath, all, coins); err != nil {
 		return err
 	}

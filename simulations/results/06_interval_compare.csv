@@ -1,0 +1,5 @@
+interval,label,best_rule_id,best_backstop,best_trailing,best_min_profit,best_avg_pnl,best_worst_coin,best_best_coin,current_rule_avg_pnl,current_rule_rank
+minute15,15분,100,-0.300,-0.100,0.080,-17.26,-61.60,16.68,-35.47,21
+minute60,1시간,97,-0.300,-0.100,0.020,-5.17,-53.62,80.24,-20.03,21
+minute240,4시간,81,-0.300,-0.030,0.000,5.46,-24.84,38.32,2.51,21
+day,1일,78,-0.250,-0.100,0.030,16.70,-10.48,76.55,9.61,21

@@ -169,9 +169,38 @@ def chart_04_sizing():
     print(f"  → {out.name}")
 
 
+def chart_06_interval_compare():
+    df = pd.read_csv(RESULTS / "06_interval_compare.csv")
+    intervals = df["label"].tolist()
+    x = range(len(intervals))
+    width = 0.4
+    fig, ax = plt.subplots(figsize=(10, 5.5))
+    # avg_pnl는 문자열로 %가 없음 (숫자)
+    ax.bar([xi - width/2 for xi in x], df["best_avg_pnl"].astype(float), width,
+           label="최적 룰 평균", color="#10b981")
+    ax.bar([xi + width/2 for xi in x], df["current_rule_avg_pnl"].astype(float), width,
+           label="현재 룰 평균", color="#f59e0b")
+    ax.axhline(0, color="#374151", linewidth=0.8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(intervals)
+    ax.set_ylabel("10코인 평균 수익률 (%)")
+    ax.set_title("시뮬 06 — 인터벌별 최적 룰 vs 현재 룰 (2년치 × 10코인 × 100룰)")
+    ax.legend()
+    for i, (b, c) in enumerate(zip(df["best_avg_pnl"].astype(float), df["current_rule_avg_pnl"].astype(float))):
+        ax.text(i - width/2, b + (1 if b >= 0 else -1), f"{b:+.1f}%", ha="center",
+                va="bottom" if b >= 0 else "top", fontsize=9, color="#d1d5db")
+        ax.text(i + width/2, c + (1 if c >= 0 else -1), f"{c:+.1f}%", ha="center",
+                va="bottom" if c >= 0 else "top", fontsize=9, color="#d1d5db")
+    plt.tight_layout()
+    out = CHARTS / "06_interval_compare.png"
+    plt.savefig(out, dpi=140)
+    plt.close()
+    print(f"  → {out.name}")
+
+
 if __name__ == "__main__":
     for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing,
-               chart_05_grid_top, chart_05_per_coin]:
+               chart_05_grid_top, chart_05_per_coin, chart_06_interval_compare]:
         try:
             fn()
         except FileNotFoundError as e:
