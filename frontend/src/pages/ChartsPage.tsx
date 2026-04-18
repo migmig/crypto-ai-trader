@@ -77,8 +77,11 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
 // ────────────────────────────────────────────
 // Portfolio
 // ────────────────────────────────────────────
+type PortfolioMode = 'total' | 'holdings'
+
 function PortfolioChart({ data }: { data: PerfRecord[] }) {
   const [range, setRange] = useState<Range>('1d')
+  const [mode, setMode] = useState<PortfolioMode>('total')
 
   const filtered = useMemo(() => {
     if (range === 'all') return data
@@ -89,28 +92,31 @@ function PortfolioChart({ data }: { data: PerfRecord[] }) {
   const chartData = useMemo(() => {
     return filtered.map((p) => ({
       time: new Date(p.timestamp).getTime(),
-      total: Number(p.total_value),
-      cash: Number(p.cash),
-      holdings: Number(p.holdings_value),
+      value: mode === 'total' ? Number(p.total_value) : Number(p.holdings_value),
     }))
-  }, [filtered])
+  }, [filtered, mode])
 
   if (data.length === 0) {
     return <EmptyBox title="Portfolio" />
   }
 
   const initial = Number(data[0].total_value)
-  const latest = filtered[filtered.length - 1]
-  const first = filtered[0]
-  const periodPnl = latest && first
-    ? ((Number(latest.total_value) - Number(first.total_value)) / Number(first.total_value)) * 100
+  const firstVal = chartData[0]?.value
+  const lastVal = chartData[chartData.length - 1]?.value
+  const periodPnl = firstVal && firstVal > 0 && lastVal !== undefined
+    ? ((lastVal - firstVal) / firstVal) * 100
     : 0
+
+  const stroke = mode === 'total' ? '#60a5fa' : '#f59e0b'
+  const gradId = mode === 'total' ? 'portGradTotal' : 'portGradHoldings'
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
       <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
         <div>
-          <h2 className="text-base font-semibold">Portfolio Value</h2>
+          <h2 className="text-base font-semibold">
+            {mode === 'total' ? 'Portfolio Value' : 'Holdings Value'}
+          </h2>
           <div className="flex items-center gap-3 mt-1 text-xs">
             <span className="text-gray-500">{filtered.length} points</span>
             <span className={periodPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}>
@@ -118,14 +124,20 @@ function PortfolioChart({ data }: { data: PerfRecord[] }) {
             </span>
           </div>
         </div>
-        <RangeSelector value={range} onChange={setRange} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex gap-1">
+            <ModeBtn label="전체" active={mode === 'total'} onClick={() => setMode('total')} />
+            <ModeBtn label="보유코인" active={mode === 'holdings'} onClick={() => setMode('holdings')} />
+          </div>
+          <RangeSelector value={range} onChange={setRange} />
+        </div>
       </div>
       <ResponsiveContainer width="100%" height={360}>
         <AreaChart data={chartData}>
           <defs>
-            <linearGradient id="portGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.3} />
-              <stop offset="100%" stopColor="#60a5fa" stopOpacity={0} />
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={stroke} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={stroke} stopOpacity={0} />
             </linearGradient>
           </defs>
           <XAxis
@@ -143,19 +155,36 @@ function PortfolioChart({ data }: { data: PerfRecord[] }) {
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
-            domain={['dataMin - 50000', 'dataMax + 50000']}
+            domain={mode === 'holdings' ? [0, 'dataMax + 50000'] : ['dataMin - 50000', 'dataMax + 50000']}
           />
           <Tooltip
             contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: '#9ca3af' }}
             labelFormatter={(v: any) => new Date(v).toLocaleString('ko-KR')}
-            formatter={(value: any) => [`\u20a9${Number(value).toLocaleString()}`, '']}
+            formatter={(value: any) => [`\u20a9${Number(value).toLocaleString()}`, mode === 'total' ? 'Total' : 'Holdings']}
           />
-          <ReferenceLine y={initial} stroke="#374151" strokeDasharray="4 4" />
-          <Area type="monotone" dataKey="total" stroke="#60a5fa" strokeWidth={2} fill="url(#portGrad)" />
+          {mode === 'total' && (
+            <ReferenceLine y={initial} stroke="#374151" strokeDasharray="4 4" />
+          )}
+          <Area type="monotone" dataKey="value" stroke={stroke} strokeWidth={2} fill={`url(#${gradId})`} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
+  )
+}
+
+function ModeBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
+        active
+          ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+          : 'bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200'
+      }`}
+    >
+      {label}
+    </button>
   )
 }
 
