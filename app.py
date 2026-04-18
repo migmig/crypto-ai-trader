@@ -542,6 +542,74 @@ def sim_chart(filename):
     return send_from_directory(str(SIMULATIONS_DIR / "charts"), filename)
 
 
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    """계좌 상태 + 거래/판단 이력 초기화. 백업은 backups/ 하위로 이동.
+    실제 매매에는 영향 없음 (시뮬레이션 모드 기준). 데이터 캐시·시뮬 결과는 보존."""
+    import shutil
+    from flask import request
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = BASE_DIR / "backups" / f"manual_{stamp}"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    moved = []
+    targets = [
+        "state.json", "trade_log.csv", "performance.csv",
+        "history.db", "history.db-journal",
+        "action.json", "signals.json",
+    ]
+    for t in targets:
+        p = BASE_DIR / t
+        if p.exists():
+            shutil.move(str(p), str(backup_dir / t))
+            moved.append(t)
+
+    # action_history 디렉터리: 전체 파일 백업 후 비움
+    ahp = BASE_DIR / "action_history"
+    if ahp.exists() and any(ahp.iterdir()):
+        shutil.move(str(ahp), str(backup_dir / "action_history"))
+        ahp.mkdir(parents=True, exist_ok=True)
+        moved.append("action_history/")
+
+    # 로그: 용량 큰 것만 비움 (압축본은 백업)
+    logs_dir = BASE_DIR / "logs"
+    if logs_dir.exists():
+        (backup_dir / "logs").mkdir(exist_ok=True)
+        for log in ["cron.log", "collect.log", "dashboard.log"]:
+            lp = logs_dir / log
+            if lp.exists():
+                shutil.move(str(lp), str(backup_dir / "logs" / log))
+                moved.append(f"logs/{log}")
+        # gz 파일도 백업 디렉터리로 이동
+        for gz in logs_dir.glob("*.log.gz"):
+            shutil.move(str(gz), str(backup_dir / "logs" / gz.name))
+            moved.append(f"logs/{gz.name}")
+
+    # 새 state.json — 초기 자본만 설정
+    initial_cap = 10_000_000
+    try:
+        cfg = json.loads((BASE_DIR / "config.json").read_text())
+        initial_cap = cfg.get("initial_capital", initial_cap)
+    except Exception:
+        pass
+    (BASE_DIR / "state.json").write_text(json.dumps({
+        "initial_capital": initial_cap,
+        "cash": initial_cap,
+        "holdings": {},
+        "total_trades_today": 0,
+        "last_trade_time": None,
+        "today_date": None,
+        "created_at": datetime.now().isoformat(),
+    }, ensure_ascii=False, indent=2))
+
+    return jsonify({
+        "ok": True,
+        "backup": str(backup_dir.relative_to(BASE_DIR)),
+        "moved": moved,
+        "initial_capital": initial_cap,
+    })
+
+
 @app.route("/api/chart/coin/<market>")
 def api_chart_coin(market):
     """코인별 차트: pyupbit 캔들 + 우리 매매 내역 오버레이.

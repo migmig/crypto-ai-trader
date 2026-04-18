@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
 import { useApi } from './hooks/useApi'
 import Dashboard from './pages/Dashboard'
@@ -6,6 +7,51 @@ import LogsPage from './pages/LogsPage'
 import ChartsPage from './pages/ChartsPage'
 import SimulationsPage from './pages/SimulationsPage'
 import { timeAgo } from './utils'
+
+function ResetButton({ onReset }: { onReset: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const handleClick = async () => {
+    if (busy) return
+    const confirm1 = window.confirm(
+      '계좌 상태·거래 이력·판단 히스토리·로그를 모두 초기화합니다.\n백업은 backups/manual_YYYYMMDD_HHMMSS/ 로 자동 이동됩니다.\n\n계속하시겠습니까?',
+    )
+    if (!confirm1) return
+    const confirm2 = window.prompt('확인을 위해 "RESET" 을 입력하세요 (대소문자 구분).')
+    if (confirm2 !== 'RESET') {
+      window.alert('입력이 일치하지 않아 취소되었습니다.')
+      return
+    }
+    setBusy(true)
+    try {
+      const r = await fetch('/api/reset', { method: 'POST' })
+      const data = await r.json()
+      if (data.ok) {
+        window.alert(
+          `초기화 완료\n백업: ${data.backup}\n이동된 항목: ${data.moved.length}개\n초기 자본: ₩${data.initial_capital.toLocaleString()}`,
+        )
+        onReset()
+      } else {
+        window.alert(`초기화 실패: ${JSON.stringify(data)}`)
+      }
+    } catch (e) {
+      window.alert(`오류: ${e}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button
+      onClick={handleClick}
+      disabled={busy}
+      aria-label="Reset state"
+      title="계좌 및 이력 초기화 (2단계 확인)"
+      className="bg-red-900/40 border border-red-700/70 text-red-200 px-2 sm:px-3 py-1.5 rounded-lg text-sm hover:bg-red-800/60 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <span className="hidden sm:inline">{busy ? 'Resetting…' : 'Reset'}</span>
+      <span className="sm:hidden">🗑</span>
+    </button>
+  )
+}
 
 export default function App() {
   const {
@@ -122,6 +168,7 @@ export default function App() {
             <span className="hidden sm:inline">Refresh</span>
             <span className="sm:hidden">↻</span>
           </button>
+          <ResetButton onReset={refresh} />
         </div>
       </header>
 
