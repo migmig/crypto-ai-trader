@@ -310,11 +310,50 @@ def chart_10_longshort():
     print(f"  → {out.name}")
 
 
+def chart_11_longshort_horizons():
+    df = pd.read_csv(RESULTS / "11_longshort_horizons.csv")
+    horizons = sorted(df["horizon_days"].unique())
+    modes = ["long", "short", "long_short"]
+    colors = {"long": "#10b981", "short": "#f87171", "long_short": "#a78bfa"}
+    labels = {"long": "Long", "short": "Short", "long_short": "Long+Short"}
+    x = range(len(horizons))
+    width = 0.27
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    for i, mode in enumerate(modes):
+        vals = [df[(df["horizon_days"] == h) & (df["mode"] == mode)]["avg_pnl_pct"].values[0]
+                if not df[(df["horizon_days"] == h) & (df["mode"] == mode)].empty else 0
+                for h in horizons]
+        dds = [df[(df["horizon_days"] == h) & (df["mode"] == mode)]["avg_max_dd_pct"].values[0]
+               if not df[(df["horizon_days"] == h) & (df["mode"] == mode)].empty else 0
+               for h in horizons]
+        offset = (i - 1) * width
+        ax1.bar([xi + offset for xi in x], vals, width, label=labels[mode], color=colors[mode])
+        ax2.bar([xi + offset for xi in x], dds, width, label=labels[mode], color=colors[mode])
+    ax1.axhline(0, color="#374151", linewidth=0.8)
+    ax1.set_xticks(list(x))
+    ax1.set_xticklabels([f"{h}일" for h in horizons])
+    ax1.set_ylabel("평균 수익률 (%)")
+    ax1.set_title("모드별 평균 수익률")
+    ax1.legend()
+    ax2.axhline(0, color="#374151", linewidth=0.8)
+    ax2.set_xticks(list(x))
+    ax2.set_xticklabels([f"{h}일" for h in horizons])
+    ax2.set_ylabel("평균 최대 낙폭 (%)")
+    ax2.set_title("모드별 최대 낙폭")
+    ax2.legend()
+    fig.suptitle("시뮬 11 — 지평별 Long / Short / Long+Short 비교 (일봉)", y=1.02)
+    plt.tight_layout()
+    out = CHARTS / "11_longshort_horizons.png"
+    plt.savefig(out, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  → {out.name}")
+
+
 if __name__ == "__main__":
     for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing,
                chart_05_grid_top, chart_05_per_coin, chart_06_interval_compare,
                chart_07_daily_horizons, chart_08_cycle_freq, chart_09_cycle4h,
-               chart_10_longshort]:
+               chart_10_longshort, chart_11_longshort_horizons]:
         try:
             fn()
         except FileNotFoundError as e:

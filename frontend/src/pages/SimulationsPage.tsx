@@ -55,6 +55,7 @@ const STORY_ORDER = [
   '08_cycle_freq',
   '09_cycle4h',
   '10_longshort',
+  '11_longshort_horizons',
 ]
 
 const HEADLINES: { id: string; headline: string; tone: 'pos' | 'neg' | 'neutral' }[] = [
@@ -68,6 +69,7 @@ const HEADLINES: { id: string; headline: string; tone: 'pos' | 'neg' | 'neutral'
   { id: '08_cycle_freq', headline: '8시간 체크 주기가 최적 (+21%), 현재 1시간 대비 +5%p', tone: 'pos' },
   { id: '09_cycle4h', headline: '4시간봉 + 48h 주기가 +113% — 단 낙폭 감수 필요', tone: 'pos' },
   { id: '10_longshort', headline: '공매도 추가는 평균 -7%p 악화, 낙폭 -38%로 확대', tone: 'neg' },
+  { id: '11_longshort_horizons', headline: '단기(30~90일) 무효, 1년 short 유일 양수, 2년은 접전', tone: 'neutral' },
 ]
 
 export default function SimulationsPage() {
@@ -416,7 +418,48 @@ function SimulationChart({ sim }: { sim: SimResult }) {
     )
   }
 
+  if (sim.id === '11_longshort_horizons') {
+    return (
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <ChartCard title="지평별 수익률 (3 모드)" subtitle="막대 = long / short / long+short">
+          <LongShortHorizonsChart rows={sim.rows} metric="avg_pnl_pct" />
+        </ChartCard>
+        <ChartCard title="지평별 최대 낙폭 (3 모드)" subtitle="L+S 는 대부분 낙폭 확대">
+          <LongShortHorizonsChart rows={sim.rows} metric="avg_max_dd_pct" />
+        </ChartCard>
+      </div>
+    )
+  }
+
   return null
+}
+
+function LongShortHorizonsChart({ rows, metric }: { rows: Record<string, string | number>[]; metric: string }) {
+  // 지평별로 묶어 각 모드를 병렬 막대로
+  const horizons = Array.from(new Set(rows.map((r) => toNumber(r.horizon_days)))).sort((a, b) => a - b)
+  const data = horizons.map((h) => {
+    const byMode: Record<string, number> = {}
+    for (const row of rows) {
+      if (toNumber(row.horizon_days) === h) {
+        byMode[String(row.mode)] = toNumber(row[metric])
+      }
+    }
+    return { name: `${h}일`, long: byMode.long ?? 0, short: byMode.short ?? 0, long_short: byMode.long_short ?? 0 }
+  })
+  return (
+    <ResponsiveContainer width="100%" height={320}>
+      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke="#1e293b" vertical={false} />
+        <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={fmtPct} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend />
+        <Bar dataKey="long" name="Long" fill="#10b981" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="short" name="Short" fill="#f87171" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="long_short" name="L+S" fill="#a78bfa" radius={[6, 6, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
 }
 
 function LongShortSummaryChart({ rows }: { rows: Record<string, string | number>[] }) {
@@ -945,6 +988,45 @@ function buildSummary(sim: SimResult): SummaryItem[] {
         label: 'Daily Rank',
         value: `1일봉 현재 룰 ${signedPct(toNumber(rows.find((r) => r.interval === 'day')?.current_rule_avg_pnl))}`,
         hint: '인터벌 전환 효과를 빠르게 확인',
+      },
+    ]
+  }
+
+  if (sim.id === '11_longshort_horizons') {
+    const horizons = Array.from(new Set(rows.map((r) => toNumber(r.horizon_days)))).sort((a, b) => a - b)
+    const pivot = horizons.map((h) => {
+      const hrows = rows.filter((r) => toNumber(r.horizon_days) === h)
+      const get = (m: string) => toNumber((hrows.find((r) => r.mode === m) || {}).avg_pnl_pct)
+      return { h, long: get('long'), short: get('short'), ls: get('long_short') }
+    })
+    const bestLong = [...pivot].sort((a, b) => b.long - a.long)[0]
+    const bestShort = [...pivot].sort((a, b) => b.short - a.short)[0]
+    const maxGap = pivot.reduce((acc, p) => {
+      const gap = p.ls - p.long
+      return Math.abs(gap) > Math.abs(acc.gap) ? { h: p.h, gap } : acc
+    }, { h: 0, gap: 0 })
+    return [
+      {
+        label: 'Best Long Horizon',
+        value: `${bestLong.h}일 ${signedPct(bestLong.long)}`,
+        tone: bestLong.long >= 0 ? 'positive' : 'negative',
+      },
+      {
+        label: 'Best Short Horizon',
+        value: `${bestShort.h}일 ${signedPct(bestShort.short)}`,
+        tone: bestShort.short > 0 ? 'positive' : 'neutral',
+        hint: '공매도가 유리했던 지평',
+      },
+      {
+        label: 'L+S vs Long 최대 격차',
+        value: `${maxGap.h}일 ${signedPct(maxGap.gap)}`,
+        tone: maxGap.gap >= 0 ? 'positive' : 'negative',
+        hint: '공매도 추가 효과의 극단 지평',
+      },
+      {
+        label: 'Horizons Tested',
+        value: `${horizons.length}개`,
+        hint: horizons.map((h) => `${h}일`).join(', '),
       },
     ]
   }

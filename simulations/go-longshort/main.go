@@ -271,8 +271,11 @@ type Result struct {
 	Days    float64
 }
 
-func backtest(cs []Candle, ind Indicators, mode Mode) Result {
+func backtest(cs []Candle, ind Indicators, mode Mode, startIdx int) Result {
 	n := len(cs)
+	if startIdx < 40 {
+		startIdx = 40
+	}
 	cash := cashInit
 	// 롱 포지션
 	longQty := 0.0
@@ -300,7 +303,7 @@ func backtest(cs []Candle, ind Indicators, mode Mode) Result {
 		return cash + longVal + shortVal
 	}
 
-	for i := 40; i < n; i++ {
+	for i := startIdx; i < n; i++ {
 		price := cs[i].Close
 		// 차입 비용 누적 (숏 보유 중)
 		if shortQty > 0 && !shortOpenTime.IsZero() {
@@ -452,8 +455,8 @@ func backtest(cs []Candle, ind Indicators, mode Mode) Result {
 		shortQty = 0
 	}
 
-	days := cs[n-1].T.Sub(cs[0].T).Hours() / 24
-	holdPct := ((finalPrice * (1 - feeRate)) / (cs[0].Close / (1 - feeRate)) - 1) * 100
+	days := cs[n-1].T.Sub(cs[startIdx].T).Hours() / 24
+	holdPct := ((finalPrice * (1 - feeRate)) / (cs[startIdx].Close / (1 - feeRate)) - 1) * 100
 
 	modeName := "long"
 	if mode == ShortOnly {
@@ -471,6 +474,7 @@ func backtest(cs []Candle, ind Indicators, mode Mode) Result {
 func main() {
 	dataDir := flag.String("data", "../data/day", "일봉 캔들 디렉터리")
 	outPath := flag.String("out", "../results/10_longshort.csv", "결과 CSV")
+	lastDays := flag.Int("last", 0, "마지막 N일만 백테스트 (0=전체)")
 	flag.Parse()
 
 	entries, err := os.ReadDir(*dataDir)
@@ -512,7 +516,14 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				r := backtest(j.c.cs, j.c.ind, j.m)
+				startIdx := 40
+				if *lastDays > 0 && len(j.c.cs) > *lastDays {
+					startIdx = len(j.c.cs) - *lastDays
+					if startIdx < 40 {
+						startIdx = 40
+					}
+				}
+				r := backtest(j.c.cs, j.c.ind, j.m, startIdx)
 				r.Coin = j.c.coin
 				results <- r
 			}

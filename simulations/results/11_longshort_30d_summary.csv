@@ -1,0 +1,4 @@
+mode,avg_pnl_pct,avg_max_dd_pct,n_coins
+long,-0.09,-0.36,10
+short,0.00,0.00,10
+long_short,-0.09,-0.36,10
