@@ -55,24 +55,42 @@ FORCE_AI=$($PYTHON -c "import json; c=json.load(open('config.json')); print('1' 
 if [ "$HAS_NON_HOLD" = "1" ] || [ "$FORCE_AI" = "1" ]; then
   echo ""
   echo "🧠 Step 4: AI 판단 (has_non_hold=$HAS_NON_HOLD, force=$FORCE_AI)"
-  claude -p "
+  claude -p --model claude-opus-4-7 "
 지금 시각: $TIMESTAMP
 
 signals.json에 알고리즘이 계산한 per_coin 스냅샷, conditions_checked, triggers_next_cycle,
-그리고 제안 actions가 들어 있다. market_data/latest.json 원본도 함께 검토해.
+제안 actions가 들어 있다. market_data/latest.json 원본(ticker, candles_15m/1h/1d, orderbook)도 함께 본다.
+state.json에서 현재 보유 현황을 확인한다.
 
-임무:
-1. signals.json의 알고리즘 판단을 검토하고 (동의/거부/수정) 최종 action.json을 작성해.
-2. CLAUDE.md의 새 스키마(per_coin / conditions_checked / triggers_next_cycle) 필드를 유지해.
-   signals.json의 같은 필드를 기반으로 작성하되, 네 판단에 맞게 보강하거나 정정해도 좋다.
-3. market_summary는 1~2문장으로 짧게, risk_assessment는 '낮음|중간|높음 - 한 줄 근거' 형식.
-4. 각 action의 reason은 구체적 수치 근거 포함.
-5. source: \"ai\" 로 표기.
+임무: 알고리즘 신호를 단순 통과시키지 말고, 아래 4가지 종합 판단을 적용해 actions를 결정해.
 
-중요:
-- 확실한 신호가 아니면 관망으로 내려라. 안전장치(CLAUDE.md) 위반 금지.
-- 기존 긴 문단형 market_summary는 쓰지 말 것. 구조화된 필드가 본문이다.
-- signals.json에 이미 제안된 actions가 부적절하다고 판단하면 actions를 비워도 된다.
+1. **크로스 코인 상관 점검**
+   - BTC가 1d 기준 명확한 약세(예: change_pct 음수 + RSI 하락 + MA 아래)면 알트 매수신호는 보수적으로 거부 또는 규모 축소.
+   - 반대로 BTC가 강세 흐름에서 알트 매수신호가 같이 뜨면 신뢰도 가산.
+
+2. **다중 시간프레임 종합**
+   - 15m에서 매수신호여도 1h·1d RSI가 70+ 과열이거나 1d 추세 하락이면 함정 가능성. 거부하거나 규모 축소.
+   - 15m 매도신호여도 1d 강한 상승추세면 일시적 조정일 수 있음. 부분매도로 완화 고려.
+
+3. **호가/유동성 점검**
+   - latest.json의 orderbook(매수·매도 호가 두께, 스프레드)을 확인해 체결 가능성과 슬리피지 위험을 평가.
+   - 스프레드가 비정상적으로 넓거나 한쪽 호가벽이 얇으면 진입 보류 또는 규모 축소.
+
+4. **포트폴리오 밸런싱**
+   - state.json holdings를 평가금액 기준으로 환산. 단일 코인 비중이 이미 30%+면 추가 매수 거부(50% 안전장치 도달 전이라도).
+   - 동시 다종목 매수신호 시, 이미 보유 중이지 않은 코인을 우선해 분산 효과 강화.
+
+5. 알고리즘 actions를 거부/수정/추가할 권한이 있다. 위 4가지 점검 결과를 reason에 명시해.
+   예: '[AI] BTC 1d 약세(-2.1%, RSI 38)로 SOL buy_strong 거부' 같은 식.
+
+출력 스키마:
+- CLAUDE.md의 v2 스키마(per_coin / conditions_checked / triggers_next_cycle) 유지.
+- per_coin은 signals.json 값 그대로 복사 가능, 단 네 판단 핵심 코인엔 짧은 노트 추가 가능.
+- market_summary는 1~2문장(BTC 컨텍스트 + 핵심 코인 액션 한 줄).
+- risk_assessment는 '낮음|중간|높음 - 한 줄 근거' 형식.
+- 각 action의 reason 앞엔 [AI] 표기. 구체적 수치 근거 필수.
+- source: \"ai\".
+- 안전장치(CLAUDE.md) 위반 금지. 확신 없으면 관망.
 " --dangerously-skip-permissions
 else
   echo ""
