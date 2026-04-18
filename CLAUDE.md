@@ -210,7 +210,7 @@ cron 대신 macOS 네이티브 스케줄러인 **launchd**를 사용한다.
 | Label | 역할 | 실행 주기 |
 |---|---|---|
 | `com.migmig.crypto-trader-collect` | 2분마다 `run_collect.sh` 실행 (수집 → 지표) — 대시보드 최신성 유지 | `StartInterval` 120초 |
-| `com.migmig.crypto-trader-cycle` | 1시간마다 `run_cycle.sh` 실행 (신호 → 조건부 AI → 매매) | `StartInterval` 3600초 |
+| `com.migmig.crypto-trader-cycle` | 8시간마다 `run_cycle.sh` 실행 (신호 → 조건부 AI → 매매) | `StartInterval` 28800초 |
 | `com.migmig.crypto-trader-dashboard` | Flask 대시보드(`app.py`) 상주 실행 | `KeepAlive` true |
 
 plist 경로:

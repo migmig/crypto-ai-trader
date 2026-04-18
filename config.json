@@ -2,7 +2,7 @@
   "initial_capital": 10000000,
   "markets": ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-ADA", "KRW-SOL", "KRW-DOGE", "KRW-AVAX", "KRW-LINK", "KRW-DOT", "KRW-SUI"],
   "mode": "simulation",
-  "cycle_interval_minutes": 60,
+  "cycle_interval_minutes": 480,
   "fee_rate": 0.0005,
   "hybrid": {
     "always_call_ai": false,

@@ -224,10 +224,41 @@ def chart_07_daily_horizons():
     print(f"  → {out.name}")
 
 
+def chart_08_cycle_freq():
+    df = pd.read_csv(RESULTS / "08_cycle_freq_summary.csv")
+    labels = [f"{m}분" if m < 60 else f"{m//60}시간" for m in df["freq_minutes"]]
+    x = range(len(labels))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
+    # P&L
+    pnl_colors = ["#10b981" if v > 0 else "#ef4444" for v in df["avg_pnl_pct"]]
+    ax1.bar(x, df["avg_pnl_pct"], color=pnl_colors)
+    ax1.axhline(0, color="#374151", linewidth=0.8)
+    ax1.set_xticks(list(x))
+    ax1.set_xticklabels(labels, rotation=30)
+    ax1.set_ylabel("평균 수익률 (%)")
+    ax1.set_title("주기별 평균 수익률")
+    for i, v in enumerate(df["avg_pnl_pct"]):
+        ax1.text(i, v + 0.3, f"{v:+.1f}%", ha="center", fontsize=9, color="#d1d5db")
+    # Max DD
+    ax2.bar(x, df["avg_max_dd_pct"], color="#f87171")
+    ax2.set_xticks(list(x))
+    ax2.set_xticklabels(labels, rotation=30)
+    ax2.set_ylabel("평균 최대 낙폭 (%)")
+    ax2.set_title("주기별 최대 낙폭")
+    for i, v in enumerate(df["avg_max_dd_pct"]):
+        ax2.text(i, v - 0.3, f"{v:.1f}%", ha="center", va="top", fontsize=9, color="#d1d5db")
+    fig.suptitle("시뮬 08 — 체크 주기 비교 (일봉 신호 + 15분 가격, min_hold 24h)", y=1.02)
+    plt.tight_layout()
+    out = CHARTS / "08_cycle_freq.png"
+    plt.savefig(out, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  → {out.name}")
+
+
 if __name__ == "__main__":
     for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing,
                chart_05_grid_top, chart_05_per_coin, chart_06_interval_compare,
-               chart_07_daily_horizons]:
+               chart_07_daily_horizons, chart_08_cycle_freq]:
         try:
             fn()
         except FileNotFoundError as e:

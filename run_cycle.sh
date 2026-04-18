@@ -1,6 +1,7 @@
 #!/bin/bash
-# 크립토 AI 트레이더 - 매매 사이클 (일봉 기반 v5)
-# launchd (com.migmig.crypto-trader-cycle): StartInterval 3600초(1시간) 주기
+# 크립토 AI 트레이더 - 매매 사이클 (일봉 기반 v5, 8시간 주기)
+# launchd (com.migmig.crypto-trader-cycle): StartInterval 28800초(8시간) 주기
+# 시뮬 08 검증: 8시간 주기가 +21% (vs 1시간 +16%)
 #
 # 데이터 수집은 run_collect.sh가 2분마다 처리 (별도 plist).
 # 여기선 매매 신호·AI·실행만 수행. latest.json이 오래됐으면 fallback 수집.
