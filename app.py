@@ -334,6 +334,7 @@ def api_logs():
 @app.route("/logs")
 @app.route("/charts")
 @app.route("/simulations")
+@app.route("/playground")
 def spa_fallback():
     return send_from_directory(str(DIST_DIR), "index.html")
 
@@ -540,6 +541,34 @@ def api_simulations_readme():
 def sim_chart(filename):
     """차트 PNG 직접 서빙."""
     return send_from_directory(str(SIMULATIONS_DIR / "charts"), filename)
+
+
+# ─────────────────────────────────────────────────────
+# Playground proxy — Go 서버(127.0.0.1:5051)로 포워딩
+# ─────────────────────────────────────────────────────
+_PLAYGROUND_BASE = "http://127.0.0.1:5051"
+
+
+@app.route("/api/playground/<path:subpath>", methods=["GET", "POST"])
+def api_playground_proxy(subpath):
+    import urllib.request
+    import urllib.error
+    from flask import request, Response
+    url = f"{_PLAYGROUND_BASE}/{subpath}"
+    try:
+        if request.method == "POST":
+            body = request.get_data()
+            req = urllib.request.Request(url, data=body, method="POST",
+                                         headers={"Content-Type": "application/json"})
+        else:
+            req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return Response(r.read(), status=r.status,
+                            content_type=r.headers.get("Content-Type", "application/json"))
+    except urllib.error.URLError as e:
+        return jsonify({"error": f"playground server unreachable: {e}"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/reset", methods=["POST"])
