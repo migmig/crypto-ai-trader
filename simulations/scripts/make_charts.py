@@ -198,9 +198,36 @@ def chart_06_interval_compare():
     print(f"  → {out.name}")
 
 
+def chart_07_daily_horizons():
+    df = pd.read_csv(RESULTS / "07_daily_horizons.csv")
+    x = range(len(df))
+    width = 0.4
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar([xi - width/2 for xi in x], df["best_avg_pnl"].astype(float), width,
+           label="지평별 최적 룰", color="#10b981")
+    ax.bar([xi + width/2 for xi in x], df["current_rule_avg_pnl"].astype(float), width,
+           label="현재 룰", color="#f59e0b")
+    ax.axhline(0, color="#374151", linewidth=0.8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([f"{d}일" for d in df["horizon_days"]])
+    ax.set_ylabel("10코인 평균 수익률 (%)")
+    ax.set_title("시뮬 07 — 일봉 기반 다중 지평 그리드 서치 (15일 ~ 1080일)")
+    ax.legend()
+    for i, (b, c) in enumerate(zip(df["best_avg_pnl"].astype(float), df["current_rule_avg_pnl"].astype(float))):
+        for xi, v in [(i - width/2, b), (i + width/2, c)]:
+            ax.text(xi, v + (1 if v >= 0 else -1), f"{v:+.1f}",
+                    ha="center", va="bottom" if v >= 0 else "top", fontsize=8, color="#d1d5db")
+    plt.tight_layout()
+    out = CHARTS / "07_daily_horizons.png"
+    plt.savefig(out, dpi=140)
+    plt.close()
+    print(f"  → {out.name}")
+
+
 if __name__ == "__main__":
     for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing,
-               chart_05_grid_top, chart_05_per_coin, chart_06_interval_compare]:
+               chart_05_grid_top, chart_05_per_coin, chart_06_interval_compare,
+               chart_07_daily_horizons]:
         try:
             fn()
         except FileNotFoundError as e:

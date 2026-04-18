@@ -350,7 +350,10 @@ func holdBaselinePct(cs []Candle) float64 {
 	return ((exit*(1-feeRate))/(entry/(1-feeRate)) - 1) * 100
 }
 
-func backtest(cs []Candle, ind Indicators, rule Rule) Result {
+func backtest(cs []Candle, ind Indicators, rule Rule, startIdx int) Result {
+	if startIdx < 40 {
+		startIdx = 40
+	}
 	cash := cashInit
 	qty := 0.0
 	cost := 0.0
@@ -360,7 +363,7 @@ func backtest(cs []Candle, ind Indicators, rule Rule) Result {
 	peakEquity := cashInit
 	maxDD := 0.0
 
-	for i := 40; i < len(cs); i++ {
+	for i := startIdx; i < len(cs); i++ {
 		price := cs[i].Close
 		equity := cash + qty*price
 		if equity > peakEquity {
@@ -496,6 +499,7 @@ func main() {
 	dataDir := flag.String("data", "../data", "캔들 CSV 디렉터리")
 	outPath := flag.String("out", "../results/05_grid_search.csv", "결과 CSV 경로")
 	prefix := flag.String("prefix", "05_grid", "요약 CSV 파일명 prefix (<prefix>_top.csv 등)")
+	lastN := flag.Int("last", 0, "마지막 N개 캔들만 백테스트 (0=전체). 지표는 전체 히스토리에서 계산.")
 	flag.Parse()
 
 	tStart := time.Now()
@@ -544,7 +548,14 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				r := backtest(j.candles, j.ind, j.rule)
+				start := 40
+				if *lastN > 0 && len(j.candles) > *lastN {
+					start = len(j.candles) - *lastN
+					if start < 40 {
+						start = 40
+					}
+				}
+				r := backtest(j.candles, j.ind, j.rule, start)
 				r.Coin = j.coin
 				r.Rule = j.rule
 				results <- r
