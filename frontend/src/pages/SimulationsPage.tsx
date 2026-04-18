@@ -53,6 +53,7 @@ const STORY_ORDER = [
   '06_interval_compare',
   '07_daily_horizons',
   '08_cycle_freq',
+  '09_cycle4h',
 ]
 
 const HEADLINES: { id: string; headline: string; tone: 'pos' | 'neg' | 'neutral' }[] = [
@@ -64,6 +65,7 @@ const HEADLINES: { id: string; headline: string; tone: 'pos' | 'neg' | 'neutral'
   { id: '06_interval_compare', headline: '15분 → 1일로 바꾸는 것만으로 +45%p 개선', tone: 'pos' },
   { id: '07_daily_horizons', headline: '일봉 + 1080일 지평에서 현재 룰 +25.58%', tone: 'pos' },
   { id: '08_cycle_freq', headline: '8시간 체크 주기가 최적 (+21%), 현재 1시간 대비 +5%p', tone: 'pos' },
+  { id: '09_cycle4h', headline: '4시간봉 + 48h 주기가 +113% — 단 낙폭 감수 필요', tone: 'pos' },
 ]
 
 export default function SimulationsPage() {
@@ -391,7 +393,72 @@ function SimulationChart({ sim }: { sim: SimResult }) {
     )
   }
 
+  if (sim.id === '09_cycle4h') {
+    return (
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <ChartCard title="주기별 평균 수익률" subtitle="4시간봉 신호 기준, 최대 8년치 데이터">
+          <Cycle4hPnlChart rows={sim.rows} />
+        </ChartCard>
+        <ChartCard title="주기별 낙폭·매매 횟수" subtitle="주기가 길수록 노이즈 걸러짐 → 매매 급감">
+          <Cycle4hTradesChart rows={sim.rows} />
+        </ChartCard>
+      </div>
+    )
+  }
+
   return null
+}
+
+function Cycle4hPnlChart({ rows }: { rows: Record<string, string | number>[] }) {
+  const data = rows.map((r) => ({
+    name: formatHoursLabel(toNumber(r.cycle_hours)),
+    avg_pnl_pct: toNumber(r.avg_pnl_pct),
+    avg_max_dd_pct: toNumber(r.avg_max_dd_pct),
+  }))
+  const maxVal = Math.max(...data.map((d) => d.avg_pnl_pct))
+  return (
+    <ResponsiveContainer width="100%" height={320}>
+      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke="#1e293b" vertical={false} />
+        <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={fmtPct} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend />
+        <Bar dataKey="avg_pnl_pct" name="Avg P&L %" radius={[8, 8, 0, 0]}>
+          {data.map((d) => (
+            <Cell key={d.name} fill={d.avg_pnl_pct === maxVal ? POSITIVE : d.avg_pnl_pct >= 0 ? PRIMARY : NEGATIVE} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function Cycle4hTradesChart({ rows }: { rows: Record<string, string | number>[] }) {
+  const data = rows.map((r) => ({
+    name: formatHoursLabel(toNumber(r.cycle_hours)),
+    avg_max_dd_pct: toNumber(r.avg_max_dd_pct),
+    total_buys: toNumber(r.total_buys),
+  }))
+  return (
+    <ResponsiveContainer width="100%" height={320}>
+      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke="#1e293b" vertical={false} />
+        <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
+        <YAxis yAxisId="left" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={fmtPct} />
+        <YAxis yAxisId="right" orientation="right" tick={{ fill: '#64748b', fontSize: 11 }} tickLine={false} axisLine={false} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend />
+        <Bar yAxisId="left" dataKey="avg_max_dd_pct" name="Avg DD %" fill={NEGATIVE} radius={[8, 8, 0, 0]} />
+        <Line yAxisId="right" type="monotone" dataKey="total_buys" name="Total Buys" stroke={SECONDARY} strokeWidth={2} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function formatHoursLabel(h: number) {
+  if (h < 24) return `${h}시간`
+  return `${h / 24}일`
 }
 
 function CycleFreqPnlChart({ rows }: { rows: Record<string, string | number>[] }) {
@@ -843,6 +910,34 @@ function buildSummary(sim: SimResult): SummaryItem[] {
         label: 'Daily Rank',
         value: `1일봉 현재 룰 ${signedPct(toNumber(rows.find((r) => r.interval === 'day')?.current_rule_avg_pnl))}`,
         hint: '인터벌 전환 효과를 빠르게 확인',
+      },
+    ]
+  }
+
+  if (sim.id === '09_cycle4h') {
+    const byPnl = [...rows].sort((a, b) => toNumber(b.avg_pnl_pct) - toNumber(a.avg_pnl_pct))
+    const bestPnl = byPnl[0]
+    const worstDD = [...rows].sort((a, b) => toNumber(a.avg_max_dd_pct) - toNumber(b.avg_max_dd_pct))[0]
+    return [
+      {
+        label: 'Best Cycle',
+        value: `${formatHoursLabel(toNumber(bestPnl.cycle_hours))} ${signedPct(toNumber(bestPnl.avg_pnl_pct))}`,
+        tone: toNumber(bestPnl.avg_pnl_pct) >= 0 ? 'positive' : 'negative',
+      },
+      {
+        label: 'Worst Drawdown',
+        value: `${formatHoursLabel(toNumber(worstDD.cycle_hours))} ${signedPct(toNumber(worstDD.avg_max_dd_pct))}`,
+        tone: 'negative',
+      },
+      {
+        label: 'Trade Volume Swing',
+        value: `${toNumber(rows[0].total_buys)} → ${toNumber(rows[rows.length - 1].total_buys)}`,
+        hint: '짧은 주기 → 긴 주기 매수 수 변화',
+      },
+      {
+        label: 'Signal Source',
+        value: '4시간봉',
+        hint: '일봉 대비 신호 빈도 6배',
       },
     ]
   }
