@@ -18,3 +18,4 @@ backtest_report.json
 backtest_trades*.csv
 simulations/data/
 simulations/go-grid/go-grid
+simulations/go-cyclefreq/go-cyclefreq
