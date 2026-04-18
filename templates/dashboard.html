@@ -16,8 +16,8 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0a0e17; 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
 .card { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 20px; }
 .card .label { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-.card .value { font-size: 24px; font-weight: 700; }
-.card .sub { font-size: 13px; margin-top: 4px; }
+.card .value { font-size: 24px; font-weight: 700; text-align: right; }
+.card .sub { font-size: 13px; margin-top: 4px; text-align: right; }
 .plus { color: #34d399; }
 .minus { color: #f87171; }
 .zero { color: #9ca3af; }
@@ -25,6 +25,7 @@ body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #0a0e17; 
 .section h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; padding: 10px 12px; color: #9ca3af; font-weight: 500; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #1f2937; }
+th.r, td.r { text-align: right; }
 td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }
 tr:hover { background: #1f2937; }
 .trend-up { color: #34d399; }
@@ -47,6 +48,11 @@ tr:hover { background: #1f2937; }
 .perf-chart canvas { width: 100% !important; height: 100% !important; }
 .last-update { font-size: 12px; color: #6b7280; }
 .coin-icon { font-size: 16px; }
+.j-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.5; }
+.j-card .j-time { color: #60a5fa; font-weight: 600; margin-bottom: 6px; }
+.j-card .j-summary { color: #d1d5db; }
+.j-card .j-risk { color: #fbbf24; margin-top: 4px; }
+.j-card .j-actions { margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -91,7 +97,7 @@ tr:hover { background: #1f2937; }
       <h2>Market Overview</h2>
       <table>
         <thead>
-          <tr><th>Coin</th><th>Price</th><th>Change</th><th>RSI</th><th>MACD</th><th>Trend</th></tr>
+          <tr><th>Coin</th><th class="r">Price</th><th class="r">Change</th><th class="r">RSI</th><th class="r">MACD</th><th>Trend</th></tr>
         </thead>
         <tbody id="marketTable"></tbody>
       </table>
@@ -116,12 +122,19 @@ tr:hover { background: #1f2937; }
     <div class="perf-chart"><canvas id="perfChart"></canvas></div>
   </div>
 
+  <!-- AI Judgment History -->
+  <div class="section">
+    <h2>AI Judgment History</h2>
+    <div id="judgmentList"></div>
+    <div id="judgmentEmpty" class="holdings-empty" style="display:none;">No judgments yet</div>
+  </div>
+
   <!-- Recent Trades -->
   <div class="section">
     <h2>Recent Trades</h2>
     <table>
       <thead>
-        <tr><th>Time</th><th>Action</th><th>Market</th><th>Amount</th><th>Price</th><th>Result</th></tr>
+        <tr><th>Time</th><th>Action</th><th>Market</th><th class="r">Amount</th><th class="r">Price</th><th>Result</th></tr>
       </thead>
       <tbody id="tradesTable"></tbody>
     </table>
@@ -146,6 +159,14 @@ function plClass(v) {
   if (v > 0) return 'plus';
   if (v < 0) return 'minus';
   return 'zero';
+}
+function fmtSummary(text) {
+  if (!text) return '';
+  // 코인 심볼 앞에서 줄바꿈
+  text = text.replace(/\.\s*(BTC|ETH|XRP|SOL|DOGE|ADA|AVAX|DOT|LINK|SUI|전체|전 종목)/g, '.<br><br>$1');
+  // 마침표+공백 뒤 줄바꿈
+  text = text.replace(/\.\s+/g, '.<br>');
+  return text;
 }
 function rsiColor(v) {
   if (v <= 30) return '#34d399';
@@ -202,14 +223,14 @@ async function loadStatus() {
       let macdH = m.macd_hist != null ? (m.macd_hist >= 0 ? '+' : '') + fmt(m.macd_hist) : '-';
       html += '<tr>';
       html += '<td><strong>' + m.coin + '</strong></td>';
-      html += '<td>\u20a9' + fmt(m.price) + '</td>';
-      html += '<td class="' + plClass(m.change_rate) + '">' + chgSign + chg + '%</td>';
-      html += '<td>';
+      html += '<td class="r">\u20a9' + fmt(m.price) + '</td>';
+      html += '<td class="r ' + plClass(m.change_rate) + '">' + chgSign + chg + '%</td>';
+      html += '<td class="r">';
       if (rsi !== '-') {
         html += rsi + '<div class="rsi-bar"><div class="rsi-fill" style="width:' + rsi + '%;background:' + rsiColor(rsi) + '"></div></div>';
       } else { html += '-'; }
       html += '</td>';
-      html += '<td class="' + plClass(m.macd_hist) + '">' + macdH + '</td>';
+      html += '<td class="r ' + plClass(m.macd_hist) + '">' + macdH + '</td>';
       html += '<td class="' + trendClass(m.trend) + '">' + (m.trend || '-') + '</td>';
       html += '</tr>';
     });
@@ -219,7 +240,7 @@ async function loadStatus() {
     let aiHtml = '';
     if (d.last_action.timestamp) {
       aiHtml += '<div class="label">Market Summary</div>';
-      aiHtml += '<div>' + (d.last_action.market_summary || 'N/A') + '</div>';
+      aiHtml += '<div>' + fmtSummary(d.last_action.market_summary || 'N/A') + '</div>';
       aiHtml += '<div class="risk">Risk: ' + (d.last_action.risk_assessment || 'N/A') + '</div>';
       if (d.last_action.actions && d.last_action.actions.length > 0) {
         aiHtml += '<div style="margin-top:12px"><div class="label">Actions</div>';
@@ -243,16 +264,16 @@ async function loadStatus() {
     if (d.holdings.length === 0) {
       document.getElementById('holdingsSection').innerHTML = '<div class="holdings-empty">No holdings - 100% cash</div>';
     } else {
-      let hHtml = '<table><thead><tr><th>Coin</th><th>Qty</th><th>Avg Price</th><th>Current</th><th>Value</th><th>P&L</th></tr></thead><tbody>';
+      let hHtml = '<table><thead><tr><th>Coin</th><th class="r">Qty</th><th class="r">Avg Price</th><th class="r">Current</th><th class="r">Value</th><th class="r">P&L</th></tr></thead><tbody>';
       d.holdings.forEach(h => {
         let plSign = h.pl >= 0 ? '+' : '';
         hHtml += '<tr>';
         hHtml += '<td><strong>' + h.coin + '</strong></td>';
-        hHtml += '<td>' + h.qty.toFixed(6) + '</td>';
-        hHtml += '<td>\u20a9' + fmt(h.avg_price) + '</td>';
-        hHtml += '<td>\u20a9' + fmt(h.current_price) + '</td>';
-        hHtml += '<td>\u20a9' + fmt(h.value) + '</td>';
-        hHtml += '<td class="' + plClass(h.pl) + '">' + plSign + fmt(h.pl) + ' (' + plSign + h.pl_pct + '%)</td>';
+        hHtml += '<td class="r">' + h.qty.toFixed(6) + '</td>';
+        hHtml += '<td class="r">\u20a9' + fmt(h.avg_price) + '</td>';
+        hHtml += '<td class="r">\u20a9' + fmt(h.current_price) + '</td>';
+        hHtml += '<td class="r">\u20a9' + fmt(h.value) + '</td>';
+        hHtml += '<td class="r ' + plClass(h.pl) + '">' + plSign + fmt(h.pl) + ' (' + plSign + h.pl_pct + '%)</td>';
         hHtml += '</tr>';
       });
       hHtml += '</tbody></table>';
@@ -280,8 +301,8 @@ async function loadTrades() {
       html += '<td>' + shortTime(t.timestamp) + '</td>';
       html += '<td><span class="trade-action ' + cls + '">' + t.action.toUpperCase() + '</span></td>';
       html += '<td>' + (t.market || '').replace('KRW-','') + '</td>';
-      html += '<td>\u20a9' + fmt(t.amount_krw) + '</td>';
-      html += '<td>\u20a9' + fmt(t.price) + '</td>';
+      html += '<td class="r">\u20a9' + fmt(t.amount_krw) + '</td>';
+      html += '<td class="r">\u20a9' + fmt(t.price) + '</td>';
       html += '<td style="font-size:12px">' + (t.result || '') + '</td>';
       html += '</tr>';
     });
@@ -367,10 +388,46 @@ async function loadPerformance() {
   }
 }
 
+async function loadJudgments() {
+  try {
+    let res = await fetch('/api/judgments');
+    let items = await res.json();
+    if (items.length === 0) {
+      document.getElementById('judgmentList').innerHTML = '';
+      document.getElementById('judgmentEmpty').style.display = 'block';
+      return;
+    }
+    document.getElementById('judgmentEmpty').style.display = 'none';
+    let html = '';
+    items.forEach(j => {
+      let hasActions = j.actions && j.actions.length > 0;
+      let actHtml = '';
+      if (hasActions) {
+        j.actions.forEach(a => {
+          let cls = a.action === 'buy' ? 'trade-buy' : 'trade-sell';
+          actHtml += '<span class="trade-action ' + cls + '">' + a.action.toUpperCase() + '</span> ';
+          actHtml += (a.market || '').replace('KRW-','') + ' \u20a9' + fmt(a.amount_krw || '') + ' ';
+        });
+      } else {
+        actHtml = '<span style="color:#6b7280;">HOLD</span>';
+      }
+      html += '<div class="j-card">';
+      html += '<div class="j-time">' + shortTime(j.timestamp) + ' &nbsp; ' + actHtml + '</div>';
+      html += '<div class="j-summary">' + fmtSummary(j.market_summary || '') + '</div>';
+      html += '<div class="j-risk">Risk: ' + (j.risk_assessment || '-') + '</div>';
+      html += '</div>';
+    });
+    document.getElementById('judgmentList').innerHTML = html;
+  } catch(e) {
+    console.error('Judgment load error:', e);
+  }
+}
+
 function loadAll() {
   loadStatus();
   loadTrades();
   loadPerformance();
+  loadJudgments();
 }
 
 loadAll();

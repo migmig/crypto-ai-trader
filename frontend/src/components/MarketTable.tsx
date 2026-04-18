@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { fmt, plColor, plSign, rsiColor, rsiBg, trendColor } from '../utils'
 import type { MarketItem } from '../types'
 
@@ -6,10 +7,14 @@ interface Props {
 }
 
 export default function MarketTable({ markets }: Props) {
+  const navigate = useNavigate()
+  const goChart = (market: string) => navigate(`/charts?coin=${encodeURIComponent(market)}`)
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 sm:p-5">
       <h2 className="text-base font-semibold mb-4">Market Overview</h2>
-      <div className="overflow-x-auto">
+
+      {/* Desktop: 테이블 */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase">
@@ -24,11 +29,15 @@ export default function MarketTable({ markets }: Props) {
             </tr>
           </thead>
           <tbody>
-            {markets.map(m => {
+            {markets.map((m) => {
               const chg = (m.change_rate * 100).toFixed(2)
               const macdH = m.macd_hist != null ? (m.macd_hist >= 0 ? '+' : '') + fmt(m.macd_hist) : '-'
               return (
-                <tr key={m.market} className="border-b border-gray-800/50 hover:bg-gray-800/40 transition">
+                <tr
+                  key={m.market}
+                  onClick={() => goChart(m.market)}
+                  className="border-b border-gray-800/50 hover:bg-gray-800/40 transition cursor-pointer"
+                >
                   <td className="py-2.5 px-3 font-semibold">{m.coin}</td>
                   <td className="py-2.5 px-3 text-right tabular-nums">{'\u20a9'}{fmt(m.price)}</td>
                   <td className={`py-2.5 px-3 text-right tabular-nums ${plColor(m.change_rate)}`}>
@@ -45,9 +54,7 @@ export default function MarketTable({ markets }: Props) {
                     ) : '-'}
                   </td>
                   <td className="py-2.5 px-3 text-right">
-                    {m.rsi_1h != null ? (
-                      <span className={rsiColor(m.rsi_1h)}>{m.rsi_1h}</span>
-                    ) : '-'}
+                    {m.rsi_1h != null ? <span className={rsiColor(m.rsi_1h)}>{m.rsi_1h}</span> : '-'}
                   </td>
                   <td className={`py-2.5 px-3 text-right tabular-nums ${plColor(m.macd_hist ?? 0)}`}>
                     {macdH}
@@ -55,14 +62,60 @@ export default function MarketTable({ markets }: Props) {
                   <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">
                     {m.volume_ratio != null ? `${m.volume_ratio}x` : '-'}
                   </td>
-                  <td className={`py-2.5 px-3 text-center ${trendColor(m.trend)}`}>
-                    {m.trend || '-'}
-                  </td>
+                  <td className={`py-2.5 px-3 text-center ${trendColor(m.trend)}`}>{m.trend || '-'}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile: 카드 그리드 */}
+      <div className="md:hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {markets.map((m) => {
+          const chg = (m.change_rate * 100).toFixed(2)
+          const macdH = m.macd_hist != null ? (m.macd_hist >= 0 ? '+' : '') + fmt(m.macd_hist) : '-'
+          return (
+            <div
+              key={m.market}
+              onClick={() => goChart(m.market)}
+              className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm cursor-pointer hover:bg-slate-700/60 transition"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-bold text-base">{m.coin}</span>
+                <span className={`text-xs ${trendColor(m.trend)}`}>{m.trend || '-'}</span>
+              </div>
+              <div className="flex items-baseline justify-between mb-2">
+                <span className="text-gray-200 tabular-nums">{'\u20a9'}{fmt(m.price)}</span>
+                <span className={`text-xs tabular-nums ${plColor(m.change_rate)}`}>
+                  {plSign(m.change_rate)}{chg}%
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-x-2 gap-y-1 text-[11px] text-gray-400">
+                <div>
+                  <div className="text-gray-500">RSI15m</div>
+                  <div className={m.rsi_15m != null ? rsiColor(m.rsi_15m) : ''}>
+                    {m.rsi_15m ?? '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500">RSI1h</div>
+                  <div className={m.rsi_1h != null ? rsiColor(m.rsi_1h) : ''}>
+                    {m.rsi_1h ?? '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-gray-500">MACD</div>
+                  <div className={plColor(m.macd_hist ?? 0)}>{macdH}</div>
+                </div>
+                <div>
+                  <div className="text-gray-500">Vol×</div>
+                  <div>{m.volume_ratio != null ? `${m.volume_ratio}x` : '-'}</div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

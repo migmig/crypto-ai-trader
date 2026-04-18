@@ -43,7 +43,7 @@ export default function LogsPage({ logs }: Props) {
   const trailCount = logs.filter((l) => l.tags.includes('TRAILING')).length
 
   return (
-    <main className="max-w-6xl mx-auto p-5 space-y-5">
+    <main className="max-w-6xl mx-auto p-3 sm:p-5 space-y-3 sm:space-y-5">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <StatCard label="Total Cycles" value={total} />
@@ -137,18 +137,19 @@ function LogCard({ log, isExpanded, onToggle }: { log: CycleLog; isExpanded: boo
     }`}>
       <button
         onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center gap-3 text-left cursor-pointer hover:bg-gray-800/40 transition rounded-xl"
+        className="w-full px-3 sm:px-4 py-3 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 text-left cursor-pointer hover:bg-gray-800/40 transition rounded-xl"
       >
         {/* Status icon */}
         <span className="text-base shrink-0">{STATUS_ICON[log.status] || '?'}</span>
 
-        {/* Timestamp */}
-        <span className="text-sm font-mono text-blue-400 shrink-0 w-40">
-          {log.timestamp}
+        {/* Timestamp (모바일에서는 축약) */}
+        <span className="text-xs sm:text-sm font-mono text-blue-400 shrink-0">
+          <span className="sm:hidden">{log.timestamp.slice(5, 16)}</span>
+          <span className="hidden sm:inline">{log.timestamp}</span>
         </span>
 
         {/* Tags */}
-        <div className="flex gap-1 shrink-0">
+        <div className="flex gap-1 shrink-0 flex-wrap">
           {log.tags.map((t) => (
             <span
               key={t}
@@ -159,8 +160,8 @@ function LogCard({ log, isExpanded, onToggle }: { log: CycleLog; isExpanded: boo
           ))}
         </div>
 
-        {/* Quick summary */}
-        <div className="flex-1 min-w-0 text-xs text-gray-400 truncate">
+        {/* Quick summary — 모바일에서는 다음 줄에 전체 폭으로 */}
+        <div className="basis-full sm:flex-1 sm:basis-auto min-w-0 text-xs text-gray-400 truncate">
           {simBuy.length > 0 && <span className="text-emerald-400 mr-2">BUY x{simBuy.length}</span>}
           {simSell.length > 0 && <span className="text-red-400 mr-2">SELL x{simSell.length}</span>}
           {totalLine && <span className="text-gray-300">{totalLine.trim()}</span>}

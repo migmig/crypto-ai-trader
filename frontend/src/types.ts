@@ -97,6 +97,10 @@ export interface StatusData {
   initial_capital: number
   total_pl: number
   total_pl_pct: number
+  liquidation_value?: number
+  liquidation_pl?: number
+  liquidation_pl_pct?: number
+  liquidation_fee?: number
   holdings: Holding[]
   markets: MarketItem[]
   total_trades_today: number
@@ -104,6 +108,12 @@ export interface StatusData {
   last_action: LastAction
   collected_at: string
   analyzed_at: string
+  total_fee?: number
+  total_volume?: number
+  fee_pct?: number
+  fee_vs_initial_pct?: number
+  total_buy_count?: number
+  total_sell_count?: number
 }
 
 export interface Trade {
@@ -127,6 +137,39 @@ export interface PerfRecord {
   pl_krw: string
   pl_pct: string
   num_holdings: string
+}
+
+export interface Candle {
+  t: string
+  o: number
+  h: number
+  l: number
+  c: number
+  v: number
+}
+
+export interface TradeMarker {
+  t: string
+  action: string
+  price: number
+  qty: number
+  amount: number
+}
+
+export interface CoinChart {
+  market: string
+  interval: string
+  candles: Candle[]
+  trades: TradeMarker[]
+}
+
+export interface JudgmentStats {
+  total: number
+  ai_count: number
+  algo_count: number
+  with_actions: number
+  first_ts: string | null
+  last_ts: string | null
 }
 
 export interface CycleLog {

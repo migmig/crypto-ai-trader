@@ -16,18 +16,18 @@ interface Props {
 
 export default function Dashboard({ status, trades, performance, judgments }: Props) {
   return (
-    <main className="max-w-7xl mx-auto p-5 space-y-5">
+    <main className="max-w-7xl mx-auto p-3 sm:p-5 space-y-3 sm:space-y-5">
       <SummaryCards data={status} />
       <MarketTable markets={status.markets} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
         <AIJudgment action={status.last_action} />
         <Holdings holdings={status.holdings} />
       </div>
 
       <PerformanceChart data={performance} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold">Recent Judgments</h2>

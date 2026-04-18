@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { StatusData, Trade, PerfRecord, Judgment, CycleLog } from '../types'
+import type { StatusData, Trade, PerfRecord, Judgment, CycleLog, JudgmentStats } from '../types'
 
 const PAGE_SIZE = 50
 
@@ -10,18 +10,20 @@ export function useApi(interval = 30000) {
   const [judgments, setJudgments] = useState<Judgment[]>([])
   const [judgmentsTotal, setJudgmentsTotal] = useState(0)
   const [judgmentsHasMore, setJudgmentsHasMore] = useState(false)
+  const [judgmentsStats, setJudgmentsStats] = useState<JudgmentStats | null>(null)
   const [logs, setLogs] = useState<CycleLog[]>([])
   const [loading, setLoading] = useState(true)
   const loadingMoreRef = useRef(false)
 
   const fetchAll = useCallback(async () => {
     try {
-      const [s, t, p, j, l] = await Promise.all([
+      const [s, t, p, j, l, js] = await Promise.all([
         fetch('/api/status').then(r => r.json()),
         fetch('/api/trades').then(r => r.json()),
         fetch('/api/performance').then(r => r.json()),
         fetch(`/api/judgments?offset=0&limit=${PAGE_SIZE}`).then(r => r.json()),
         fetch('/api/logs').then(r => r.json()),
+        fetch('/api/judgments/stats').then(r => r.json()),
       ])
       setStatus(s)
       setTrades(t)
@@ -38,6 +40,7 @@ export function useApi(interval = 30000) {
         setJudgmentsHasMore(false)
       }
       setLogs(l)
+      if (js && typeof js.total === 'number') setJudgmentsStats(js)
     } catch (e) {
       console.error('API error:', e)
     } finally {
@@ -71,6 +74,6 @@ export function useApi(interval = 30000) {
 
   return {
     status, trades, performance, judgments, logs, loading, refresh: fetchAll,
-    judgmentsTotal, judgmentsHasMore, loadMoreJudgments,
+    judgmentsTotal, judgmentsHasMore, loadMoreJudgments, judgmentsStats,
   }
 }

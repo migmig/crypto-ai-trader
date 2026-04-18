@@ -271,7 +271,7 @@ function ConditionBlock({ c }: { c: ConditionsForCoin }) {
                 r.matched ? 'text-emerald-400' : 'text-gray-500'
               }`}
             >
-              {r.matched ? '✓' : '·'} {signalLabel(r.signal).slice(0, 4)}
+              {r.matched ? '✓' : '·'} {(signalLabel(r.signal) || '').slice(0, 4)}
             </span>
             <div className="flex-1 text-gray-400">
               {r.checks.map((ck, ci) => (

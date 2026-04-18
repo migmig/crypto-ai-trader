@@ -10,6 +10,7 @@ import {
 } from '../utils'
 import type {
   Judgment,
+  JudgmentStats,
   PerCoinSnapshot,
   ConditionsForCoin,
 } from '../types'
@@ -19,12 +20,13 @@ interface Props {
   total?: number
   hasMore?: boolean
   onLoadMore?: () => void | Promise<void>
+  stats?: JudgmentStats | null
 }
 
 type FilterSource = 'all' | 'ai' | 'algo'
 type FilterSignal = 'all' | 'has_action' | 'hold_only'
 
-export default function HistoryPage({ judgments, total, hasMore, onLoadMore }: Props) {
+export default function HistoryPage({ judgments, total, hasMore, onLoadMore, stats }: Props) {
   const [searchParams] = useSearchParams()
   const highlightTs = searchParams.get('ts')
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -70,25 +72,22 @@ export default function HistoryPage({ judgments, total, hasMore, onLoadMore }: P
     })
   }, [judgments, srcFilter, sigFilter])
 
-  // Stats (현재 로드된 기준)
+  // 전역 통계 (stats가 있으면 우선, 없으면 로드된 것에서 계산)
   const loadedCount = judgments.length
-  const aiCount = judgments.filter((j) => j.source === 'ai').length
-  const algoCount = loadedCount - aiCount
-  const actionCount = judgments.filter((j) => j.actions?.length > 0).length
-  const serverTotal = total ?? loadedCount
+  const serverTotal = stats?.total ?? total ?? loadedCount
+  const aiCount = stats?.ai_count ?? judgments.filter((j) => j.source === 'ai').length
+  const algoCount = stats?.algo_count ?? (loadedCount - aiCount)
+  const actionCount = stats?.with_actions ?? judgments.filter((j) => j.actions?.length > 0).length
+  const subtext = loadedCount < serverTotal ? `loaded ${loadedCount}` : undefined
 
   return (
-    <main className="max-w-6xl mx-auto p-5 space-y-5">
-      {/* Stats bar */}
+    <main className="max-w-6xl mx-auto p-3 sm:p-5 space-y-3 sm:space-y-5">
+      {/* Stats bar (전역 기준) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          label="Total Judgments"
-          value={serverTotal}
-          subtext={loadedCount < serverTotal ? `loaded ${loadedCount}` : undefined}
-        />
-        <StatCard label="AI Calls" value={aiCount} accent="purple" />
-        <StatCard label="Algo Only" value={algoCount} accent="slate" />
-        <StatCard label="With Actions" value={actionCount} accent="emerald" />
+        <StatCard label="Total Judgments" value={serverTotal} subtext={subtext} />
+        <StatCard label="AI Calls" value={aiCount} accent="purple" subtext={subtext} />
+        <StatCard label="Algo Only" value={algoCount} accent="slate" subtext={subtext} />
+        <StatCard label="With Actions" value={actionCount} accent="emerald" subtext={subtext} />
       </div>
 
       {/* Filters */}

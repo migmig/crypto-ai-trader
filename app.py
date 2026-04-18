@@ -75,6 +75,11 @@ def index():
     return send_from_directory(str(DIST_DIR), "index.html")
 
 
+@app.route("/favicon.svg")
+def favicon():
+    return send_from_directory(str(DIST_DIR), "favicon.svg", mimetype="image/svg+xml")
+
+
 @app.route("/api/status")
 def api_status():
     state = load_json("state.json") or {}
@@ -119,6 +124,33 @@ def api_status():
     total_pl = total - initial
     total_pl_pct = (total_pl / initial * 100) if initial > 0 else 0
 
+    # 지금 즉시 전량 매도 시 순수령액 (현금 + 보유 평가 × (1 - 수수료율))
+    fee_rate = float(config.get("fee_rate", 0.0005))
+    liquidation_fee = holdings_value * fee_rate
+    liquidation_value = cash + holdings_value - liquidation_fee
+    liquidation_pl = liquidation_value - initial
+    liquidation_pl_pct = (liquidation_pl / initial * 100) if initial > 0 else 0
+
+    # 누적 수수료/거래량 집계 (trade_log.csv)
+    all_trades = load_csv("trade_log.csv")
+    total_fee = 0.0
+    total_volume = 0.0
+    buy_count = 0
+    sell_count = 0
+    for t in all_trades:
+        try:
+            total_fee += float(t.get("fee", 0) or 0)
+            total_volume += float(t.get("amount_krw", 0) or 0)
+            if t.get("action") == "buy":
+                buy_count += 1
+            elif t.get("action") == "sell":
+                sell_count += 1
+        except Exception:
+            continue
+    fee_pct = (total_fee / total_volume * 100) if total_volume > 0 else 0
+    # 수수료가 손익에서 차지하는 비중 (손실 시에는 별 의미 없지만 정보성)
+    fee_vs_initial_pct = (total_fee / initial * 100) if initial > 0 else 0
+
     # 시장 데이터 요약
     market_summary = []
     for m in all_markets:
@@ -145,6 +177,16 @@ def api_status():
         "initial_capital": initial,
         "total_pl": round(total_pl),
         "total_pl_pct": round(total_pl_pct, 2),
+        "liquidation_value": round(liquidation_value),
+        "liquidation_pl": round(liquidation_pl),
+        "liquidation_pl_pct": round(liquidation_pl_pct, 2),
+        "liquidation_fee": round(liquidation_fee),
+        "total_fee": round(total_fee),
+        "total_volume": round(total_volume),
+        "fee_pct": round(fee_pct, 3),
+        "fee_vs_initial_pct": round(fee_vs_initial_pct, 2),
+        "total_buy_count": buy_count,
+        "total_sell_count": sell_count,
         "holdings": holdings_detail,
         "markets": market_summary,
         "total_trades_today": state.get("total_trades_today", 0),
@@ -204,6 +246,13 @@ def api_judgments():
         until=until,
     )
     return jsonify(result)
+
+
+@app.route("/api/judgments/stats")
+def api_judgments_stats():
+    """히스토리 전역 통계 (전체 수, AI/ALGO 분포, 액션 발생 수, 기간)."""
+    from history_db import stats
+    return jsonify(stats())
 
 
 @app.route("/api/logs")
@@ -283,8 +332,71 @@ def api_logs():
 
 
 @app.route("/logs")
-def logs_page():
+@app.route("/charts")
+def spa_fallback():
     return send_from_directory(str(DIST_DIR), "index.html")
+
+
+@app.route("/api/chart/coin/<market>")
+def api_chart_coin(market):
+    """코인별 차트: pyupbit 캔들 + 우리 매매 내역 오버레이.
+    ?interval=minute15|minute30|minute60|minute240|day (default minute60)
+    &count=200 (default)
+    """
+    from flask import request
+    interval = request.args.get("interval", "minute60")
+    if interval not in ("minute15", "minute30", "minute60", "minute240", "day"):
+        interval = "minute60"
+    try:
+        count = min(500, max(10, int(request.args.get("count", 200))))
+    except ValueError:
+        count = 200
+
+    pu = _get_pyupbit()
+    candles = []
+    if pu:
+        try:
+            df = pu.get_ohlcv(market, interval=interval, count=count)
+            if df is not None:
+                for ts, row in df.iterrows():
+                    candles.append({
+                        "t": ts.isoformat(),
+                        "o": float(row["open"]),
+                        "h": float(row["high"]),
+                        "l": float(row["low"]),
+                        "c": float(row["close"]),
+                        "v": float(row["volume"]),
+                    })
+        except Exception as e:
+            return jsonify({"error": str(e), "candles": [], "trades": []}), 500
+
+    # 매매 내역 오버레이 (해당 코인, 캔들 범위 내)
+    trades = []
+    if candles:
+        since = candles[0]["t"]
+        trade_rows = load_csv("trade_log.csv")
+        for t in trade_rows:
+            if t.get("market") != market:
+                continue
+            if t.get("timestamp", "") < since:
+                continue
+            try:
+                trades.append({
+                    "t": t["timestamp"],
+                    "action": t.get("action", ""),
+                    "price": float(t.get("price", 0)),
+                    "qty": float(t.get("qty", 0)),
+                    "amount": float(t.get("amount_krw", 0)),
+                })
+            except Exception:
+                continue
+
+    return jsonify({
+        "market": market,
+        "interval": interval,
+        "candles": candles,
+        "trades": trades,
+    })
 
 
 if __name__ == "__main__":

@@ -62,18 +62,18 @@ export function trendColor(t: string): string {
   return 'text-yellow-400'
 }
 
-export function signalLabel(s: string): string {
+export function signalLabel(s: string | null | undefined): string {
   switch (s) {
     case 'buy_strong': return '적극매수'
     case 'buy': return '매수'
     case 'sell_strong': return '적극매도'
     case 'sell': return '매도'
     case 'hold': return '관망'
-    default: return s
+    default: return s || '-'
   }
 }
 
-export function signalClass(s: string): string {
+export function signalClass(s: string | null | undefined): string {
   switch (s) {
     case 'buy_strong': return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
     case 'buy': return 'bg-emerald-900/50 text-emerald-300 border border-emerald-800'
