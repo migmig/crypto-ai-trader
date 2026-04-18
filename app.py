@@ -385,7 +385,48 @@ _SIM_META = [
         "chart": "04_adaptive_sizing.png",
         "note": "역발상 E가 평균 -0.82%로 승리하지만 현재 대비 +0.21%p로 개선 폭 작음. 실전 도입 전 추가 검증 필요.",
     },
+    {
+        "id": "05_grid_search",
+        "title": "Go 그리드 서치 (1년치 × 10코인 × 100룰)",
+        "subtitle": "대규모 파라미터 탐색 — 현재 룰이 하위권으로 밀림",
+        "description": (
+            "10개 코인 1년치 15분봉(코인당 35,040캔들)에 100가지 룰 조합을 모두 돌린 그리드 서치. "
+            "Go 병렬 처리로 1,000 백테스트를 0.69초에 완료 (약 1,459 backtest/s). "
+            "룰 그리드: backstop 5종 × trailing 4종 × min_profit 5종 = 100."
+        ),
+        "chart": "05_grid_top.png",
+        "extra_charts": ["05_grid_per_coin.png"],
+        "extra_tables": [
+            {"title": "코인별 상세 (단순 홀딩 vs 현재 룰 vs 코인별 최적 룰)",
+             "csv": "05_grid_per_coin.csv"},
+        ],
+        "note": (
+            "현재 룰(backstop=-0.15, trailing=-0.07)은 84/100위, 평균 -24.31%. "
+            "상위 룰 공통점: backstop 완화(-0.25~-0.30) + trailing 느슨(-0.10) + min_profit 높음(+0.08). "
+            "1년치 대부분 구간이 알트 약세장이었고, 룰은 '덜 매도할수록' 유리했던 것. "
+            "ETH만 홀딩(+53%)이 모든 룰보다 좋음 — 상승장엔 룰이 오히려 이익 누름."
+        ),
+    },
 ]
+
+
+def _load_csv_rows(path: Path) -> list:
+    rows = []
+    if not path.exists():
+        return rows
+    with path.open() as f:
+        for row in csv.DictReader(f):
+            parsed = {}
+            for k, v in row.items():
+                try:
+                    if v and v.replace(".", "", 1).replace("-", "", 1).isdigit():
+                        parsed[k] = float(v)
+                    else:
+                        parsed[k] = v
+                except Exception:
+                    parsed[k] = v
+            rows.append(parsed)
+    return rows
 
 
 @app.route("/api/simulations")
@@ -393,20 +434,21 @@ def api_simulations_list():
     """시뮬 목록 + 각 CSV를 JSON으로 변환."""
     result = []
     for meta in _SIM_META:
-        csv_path = SIMULATIONS_DIR / "results" / f"{meta['id']}.csv"
-        rows = []
-        if csv_path.exists():
-            with csv_path.open() as f:
-                for row in csv.DictReader(f):
-                    # 숫자 필드 변환 시도
-                    parsed = {}
-                    for k, v in row.items():
-                        try:
-                            parsed[k] = float(v) if v and v.replace(".", "", 1).replace("-", "", 1).isdigit() else v
-                        except Exception:
-                            parsed[k] = v
-                    rows.append(parsed)
-        result.append({**meta, "rows": rows})
+        # 기본 테이블: id에서 파일명 추론 — 05의 경우 '05_grid_top.csv' (별칭 있으면 그 쪽)
+        primary_csv = meta.get("primary_csv", f"{meta['id']}.csv")
+        if meta["id"] == "05_grid_search":
+            primary_csv = "05_grid_top.csv"
+        rows = _load_csv_rows(SIMULATIONS_DIR / "results" / primary_csv)
+        extra_tables = []
+        for t in meta.get("extra_tables", []):
+            extra_tables.append({
+                "title": t["title"],
+                "rows": _load_csv_rows(SIMULATIONS_DIR / "results" / t["csv"]),
+            })
+        entry = {**meta, "rows": rows}
+        if extra_tables:
+            entry["extra_tables"] = extra_tables
+        result.append(entry)
     return jsonify(result)
 
 

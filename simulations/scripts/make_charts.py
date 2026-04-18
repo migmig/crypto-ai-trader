@@ -97,6 +97,59 @@ def chart_03_avg():
     print(f"  → {out.name}")
 
 
+def chart_05_grid_top():
+    df = pd.read_csv(RESULTS / "05_grid_top.csv")
+    df = df.head(20)  # 상위 20만
+    fig, ax = plt.subplots(figsize=(10, 7))
+    # 색상: 현재 룰 노란색, 상위권 녹색
+    colors = []
+    for _, r in df.iterrows():
+        if "현재" in str(r.get("backstop_pct", "")):
+            colors.append("#f59e0b")
+        else:
+            colors.append("#10b981" if r["avg_pnl_pct"] > -20 else "#ef4444")
+    labels = [f"#{int(r['rank']):>3} b{r['backstop_pct']} t{r['trailing_pct']} mp{r['min_profit']}"
+              for _, r in df.iterrows()]
+    ax.barh(labels, df["avg_pnl_pct"], color=colors)
+    ax.axvline(0, color="#374151", linewidth=0.8)
+    ax.set_xlabel("평균 수익률 (%) — 10개 코인")
+    ax.set_title("시뮬 05 — Go 그리드 서치 상위 20 룰 (1년치, 10 코인 × 100 룰 = 1000 백테스트)")
+    ax.invert_yaxis()
+    for i, v in enumerate(df["avg_pnl_pct"]):
+        ax.text(v - 0.3, i, f"{v:+.1f}%", va="center", ha="right", fontsize=8, color="white")
+    plt.tight_layout()
+    out = CHARTS / "05_grid_top.png"
+    plt.savefig(out, dpi=140)
+    plt.close()
+    print(f"  → {out.name}")
+
+
+def chart_05_per_coin():
+    df = pd.read_csv(RESULTS / "05_grid_per_coin.csv")
+    coins = [c.replace("KRW-", "") for c in df["coin"]]
+    x = range(len(coins))
+    width = 0.26
+    fig, ax = plt.subplots(figsize=(11, 6))
+    ax.bar([xi - width for xi in x], df["hold_pnl_pct"], width, label="단순 홀딩", color="#9ca3af")
+    ax.bar(list(x), df["current_rule_pnl_pct"], width, label="현재 룰", color="#f59e0b")
+    ax.bar([xi + width for xi in x], df["best_rule_pnl_pct"], width, label="코인별 최적 룰", color="#10b981")
+    ax.axhline(0, color="#374151", linewidth=0.8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(coins, rotation=30)
+    ax.set_ylabel("수익률 (%)")
+    ax.set_title("시뮬 05 — 코인별 비교: 단순 홀딩 vs 현재 룰 vs 최적 룰 (1년치)")
+    ax.legend(loc="lower right")
+    for i, (h, c, b) in enumerate(zip(df["hold_pnl_pct"], df["current_rule_pnl_pct"], df["best_rule_pnl_pct"])):
+        for xi, v in [(i - width, h), (i, c), (i + width, b)]:
+            ax.text(xi, v + (1 if v >= 0 else -1), f"{v:+.0f}", ha="center",
+                    va="bottom" if v >= 0 else "top", fontsize=7, color="#d1d5db")
+    plt.tight_layout()
+    out = CHARTS / "05_grid_per_coin.png"
+    plt.savefig(out, dpi=140)
+    plt.close()
+    print(f"  → {out.name}")
+
+
 def chart_04_sizing():
     df = pd.read_csv(RESULTS / "04_adaptive_sizing.csv")
     df = df.sort_values("avg")
@@ -117,7 +170,8 @@ def chart_04_sizing():
 
 
 if __name__ == "__main__":
-    for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing]:
+    for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing,
+               chart_05_grid_top, chart_05_per_coin]:
         try:
             fn()
         except FileNotFoundError as e:

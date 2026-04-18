@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react'
 
+interface ExtraTable {
+  title: string
+  rows: Record<string, string | number>[]
+}
+
 interface SimResult {
   id: string
   title: string
   subtitle: string
   description: string
   chart: string | null
+  extra_charts?: string[]
+  extra_tables?: ExtraTable[]
   note: string
   rows: Record<string, string | number>[]
 }
@@ -93,6 +100,19 @@ export default function SimulationsPage() {
         )}
 
         <ResultTable rows={current.rows} />
+
+        {current.extra_charts?.map((c) => (
+          <div key={c} className="bg-black/40 border border-gray-800 rounded-lg p-2 overflow-auto">
+            <img src={`/simulations/charts/${c}`} alt={c} className="mx-auto max-w-full" loading="lazy" />
+          </div>
+        ))}
+
+        {current.extra_tables?.map((t, i) => (
+          <div key={i} className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-300">{t.title}</h3>
+            <ResultTable rows={t.rows} />
+          </div>
+        ))}
 
         <div className="border-t border-gray-800 pt-3 text-xs sm:text-sm text-amber-300/90">
           <span className="text-gray-500 mr-1">💡</span>{current.note}
