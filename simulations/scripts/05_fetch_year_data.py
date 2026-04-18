@@ -22,28 +22,38 @@ CFG = json.loads((ROOT / "config.json").read_text())
 DATA = Path(__file__).resolve().parents[1] / "data"
 DATA.mkdir(parents=True, exist_ok=True)
 
-YEAR_CANDLES = 365 * 96  # 15분봉 1년치
 STALE_DAYS = 7  # 이 기간 이상 지난 파일만 재다운로드
 
 
-def is_fresh(path: Path) -> bool:
+def cached_row_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with path.open() as f:
+        return sum(1 for _ in f) - 1  # header 제외
+
+
+def is_fresh(path: Path, target_rows: int) -> bool:
     if not path.exists():
         return False
     age_days = (time.time() - path.stat().st_mtime) / 86400
-    return age_days < STALE_DAYS
+    if age_days > STALE_DAYS:
+        return False
+    # 기존 파일이 목표 행 수의 95% 이상이면 캐시 사용
+    return cached_row_count(path) >= int(target_rows * 0.95)
 
 
-def fetch_one(market: str, end: datetime, force: bool = False) -> Path:
+def fetch_one(market: str, end: datetime, days: int, force: bool = False) -> Path:
     path = DATA / f"{market}.csv"
-    if not force and is_fresh(path):
-        print(f"  {market}: cache hit ({path.stat().st_size:,} bytes)")
+    target_rows = days * 96
+    if not force and is_fresh(path, target_rows):
+        print(f"  {market}: cache hit ({cached_row_count(path):,} rows)")
         return path
 
-    print(f"  {market}: fetching {YEAR_CANDLES:,} candles...", flush=True)
+    print(f"  {market}: fetching {target_rows:,} candles ({days}일)...", flush=True)
     t0 = time.time()
     df = pyupbit.get_ohlcv(
         market, interval="minute15",
-        count=YEAR_CANDLES,
+        count=target_rows,
         to=end.strftime("%Y-%m-%d %H:%M:%S"),
     )
     if df is None or df.empty:
@@ -60,19 +70,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="cache 무시하고 재다운로드")
     ap.add_argument("--end", default="2026-04-18 12:00", help="종료 시각 (KST)")
+    ap.add_argument("--days", type=int, default=365, help="몇 일치 (기본 365)")
     args = ap.parse_args()
 
     end = datetime.strptime(args.end, "%Y-%m-%d %H:%M")
     markets = CFG["markets"]
-    print(f"10개 코인 × 1년치 다운로드 (end={args.end})")
+    print(f"10개 코인 × {args.days}일치 다운로드 (end={args.end})")
     print(f"캐시 디렉터리: {DATA}")
-    print(f"stale 기준: {STALE_DAYS}일 이상 경과 시 재다운로드")
+    print(f"stale 기준: {STALE_DAYS}일 이상 경과 또는 {args.days}일치 미달 시 재다운로드")
     print(f"force 모드: {args.force}\n")
 
     for i, m in enumerate(markets, 1):
         print(f"[{i}/{len(markets)}]", end=" ")
-        fetch_one(m, end=end, force=args.force)
-        time.sleep(0.2)  # 페이지네이션 사이 여유 (pyupbit가 자체적으로 관리하지만 안전 마진)
+        fetch_one(m, end=end, days=args.days, force=args.force)
+        time.sleep(0.2)
 
     print(f"\n✅ 완료. 총 크기: {sum(f.stat().st_size for f in DATA.glob('*.csv')):,} bytes")
 
