@@ -395,6 +395,9 @@ _SIM_META = [
             "2년치 × 10코인 × 8개 주기 = 80 백테스트."
         ),
         "chart": "08_cycle_freq.png",
+        "extra_tables": [
+            {"title": "코인별 주기 상세 (80행)", "csv": "08_cycle_freq.csv"},
+        ],
         "note": (
             "8시간 주기가 최고 (+21.03%, 최대 낙폭 -14.38%). 현재 1시간(+16.04%) 대비 +5%p 개선. "
             "매수 횟수는 주기 무관 거의 동일(90~94회) — min_hold 24h가 제대로 작동 중. "
@@ -485,10 +488,12 @@ def api_simulations_list():
     """시뮬 목록 + 각 CSV를 JSON으로 변환."""
     result = []
     for meta in _SIM_META:
-        # 기본 테이블: id에서 파일명 추론 — 05의 경우 '05_grid_top.csv' (별칭 있으면 그 쪽)
+        # 기본 테이블: id에서 파일명 추론 — 별칭 있으면 그 쪽
         primary_csv = meta.get("primary_csv", f"{meta['id']}.csv")
         if meta["id"] == "05_grid_search":
             primary_csv = "05_grid_top.csv"
+        elif meta["id"] == "08_cycle_freq":
+            primary_csv = "08_cycle_freq_summary.csv"
         rows = _load_csv_rows(SIMULATIONS_DIR / "results" / primary_csv)
         extra_tables = []
         for t in meta.get("extra_tables", []):
