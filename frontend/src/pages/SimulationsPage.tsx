@@ -54,6 +54,7 @@ const STORY_ORDER = [
   '07_daily_horizons',
   '08_cycle_freq',
   '09_cycle4h',
+  '10_longshort',
 ]
 
 const HEADLINES: { id: string; headline: string; tone: 'pos' | 'neg' | 'neutral' }[] = [
@@ -66,6 +67,7 @@ const HEADLINES: { id: string; headline: string; tone: 'pos' | 'neg' | 'neutral'
   { id: '07_daily_horizons', headline: '일봉 + 1080일 지평에서 현재 룰 +25.58%', tone: 'pos' },
   { id: '08_cycle_freq', headline: '8시간 체크 주기가 최적 (+21%), 현재 1시간 대비 +5%p', tone: 'pos' },
   { id: '09_cycle4h', headline: '4시간봉 + 48h 주기가 +113% — 단 낙폭 감수 필요', tone: 'pos' },
+  { id: '10_longshort', headline: '공매도 추가는 평균 -7%p 악화, 낙폭 -38%로 확대', tone: 'neg' },
 ]
 
 export default function SimulationsPage() {
@@ -406,7 +408,40 @@ function SimulationChart({ sim }: { sim: SimResult }) {
     )
   }
 
+  if (sim.id === '10_longshort') {
+    return (
+      <ChartCard title="모드별 평균 수익률" subtitle="long / short / long+short 각각의 평균 성과">
+        <LongShortSummaryChart rows={sim.rows} />
+      </ChartCard>
+    )
+  }
+
   return null
+}
+
+function LongShortSummaryChart({ rows }: { rows: Record<string, string | number>[] }) {
+  const data = rows.map((r) => ({
+    mode: String(r.mode ?? '-'),
+    pnl: toNumber(r.avg_pnl_pct),
+    dd: toNumber(r.avg_max_dd_pct),
+  }))
+  return (
+    <ResponsiveContainer width="100%" height={320}>
+      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+        <CartesianGrid stroke="#1e293b" vertical={false} />
+        <XAxis dataKey="mode" tick={{ fill: '#94a3b8', fontSize: 12 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={fmtPct} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend />
+        <Bar dataKey="pnl" name="Avg P&L %" radius={[8, 8, 0, 0]}>
+          {data.map((d) => (
+            <Cell key={d.mode} fill={d.pnl >= 0 ? POSITIVE : NEGATIVE} />
+          ))}
+        </Bar>
+        <Bar dataKey="dd" name="Avg Max DD %" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
 }
 
 function Cycle4hPnlChart({ rows }: { rows: Record<string, string | number>[] }) {
@@ -910,6 +945,41 @@ function buildSummary(sim: SimResult): SummaryItem[] {
         label: 'Daily Rank',
         value: `1일봉 현재 룰 ${signedPct(toNumber(rows.find((r) => r.interval === 'day')?.current_rule_avg_pnl))}`,
         hint: '인터벌 전환 효과를 빠르게 확인',
+      },
+    ]
+  }
+
+  if (sim.id === '10_longshort') {
+    const byPnl = [...rows].sort((a, b) => toNumber(b.avg_pnl_pct) - toNumber(a.avg_pnl_pct))
+    const best = byPnl[0]
+    const worstDD = [...rows].sort((a, b) => toNumber(a.avg_max_dd_pct) - toNumber(b.avg_max_dd_pct))[0]
+    const longRow = rows.find((r) => String(r.mode) === 'long')
+    const shortRow = rows.find((r) => String(r.mode) === 'short')
+    const lsRow = rows.find((r) => String(r.mode) === 'long_short')
+    const deltaLs = lsRow && longRow ? toNumber(lsRow.avg_pnl_pct) - toNumber(longRow.avg_pnl_pct) : 0
+    return [
+      {
+        label: 'Best Mode',
+        value: `${best.mode} ${signedPct(toNumber(best.avg_pnl_pct))}`,
+        tone: toNumber(best.avg_pnl_pct) >= 0 ? 'positive' : 'negative',
+      },
+      {
+        label: 'Long vs L+S 갭',
+        value: signedPct(deltaLs),
+        tone: deltaLs >= 0 ? 'positive' : 'negative',
+        hint: '공매도 추가가 얼마나 도움/손해였는지',
+      },
+      {
+        label: 'Short-only',
+        value: shortRow ? signedPct(toNumber(shortRow.avg_pnl_pct)) : '-',
+        tone: shortRow && toNumber(shortRow.avg_pnl_pct) >= 0 ? 'positive' : 'negative',
+        hint: '공매도만으로 운용한 경우',
+      },
+      {
+        label: 'Worst Drawdown',
+        value: `${worstDD.mode} ${signedPct(toNumber(worstDD.avg_max_dd_pct))}`,
+        tone: 'negative',
+        hint: '모드별 평균 낙폭',
       },
     ]
   }

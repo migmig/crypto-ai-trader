@@ -387,6 +387,27 @@ _SIM_META = [
         "note": "역발상 E가 평균 -0.82%로 승리하지만 현재 대비 +0.21%p로 개선 폭 작음. 실전 도입 전 추가 검증 필요.",
     },
     {
+        "id": "10_longshort",
+        "title": "공매도 추가 실험 (일봉, 최대 8.5년)",
+        "subtitle": "1일봉이면 공매도가 도움 될까? — 결론: 아니오",
+        "description": (
+            "BTC/ETH/XRP/ADA는 Upbit 상장 이래 전체 데이터(~8.5년). 각 코인에 Long-only / Short-only / Long+Short "
+            "3가지 모드 적용. 공매도 차입비용 0.02%/일 가정."
+        ),
+        "chart": "10_longshort.png",
+        "primary_csv": "10_longshort_summary.csv",
+        "extra_tables": [
+            {"title": "코인별 상세 (모든 모드)", "csv": "10_longshort.csv"},
+        ],
+        "note": (
+            "평균: Long-only +27.67%, Short-only -6.05%, Long+Short +20.52%. "
+            "공매도 추가는 평균 -7%p 악화 + 최대낙폭 -38%로 확대. "
+            "BTC 8.5년 단순 홀딩 +2504% vs 룰 long-only +21% — 대상승 구간 다수 포함되어 룰이 홀딩 대패. "
+            "XRP만 예외적으로 long+short(+154%)이 long(+136%)보다 소폭 우위 — 변동성·상하 반복 덕분. "
+            "결론: 암호화폐 장기는 상승장이 대부분 → 공매도는 그 구간마다 손실 → 평균적으로 해로움."
+        ),
+    },
+    {
         "id": "09_cycle4h",
         "title": "4시간봉 신호 + 주기 비교 (최대 8년치)",
         "subtitle": "신호 기준을 4h로 당기면? 대신 체크 주기는 길게 가도 될까",
@@ -514,6 +535,8 @@ def api_simulations_list():
             primary_csv = "05_grid_top.csv"
         elif meta["id"] == "08_cycle_freq":
             primary_csv = "08_cycle_freq_summary.csv"
+        elif meta["id"] == "09_cycle4h":
+            primary_csv = "09_cycle4h_summary.csv"
         rows = _load_csv_rows(SIMULATIONS_DIR / "results" / primary_csv)
         extra_tables = []
         for t in meta.get("extra_tables", []):

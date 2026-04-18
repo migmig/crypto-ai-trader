@@ -286,10 +286,35 @@ def chart_09_cycle4h():
     print(f"  → {out.name}")
 
 
+def chart_10_longshort():
+    df = pd.read_csv(RESULTS / "10_longshort.csv")
+    # 피벗: 코인 행 × 모드 열
+    pivot = df.pivot(index="coin", columns="mode", values="pnl_pct").fillna(0)
+    coins = [c.replace("KRW-", "") for c in pivot.index]
+    x = range(len(coins))
+    width = 0.27
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar([xi - width for xi in x], pivot["long"].values, width, label="Long only", color="#10b981")
+    ax.bar(list(x), pivot["short"].values, width, label="Short only", color="#f87171")
+    ax.bar([xi + width for xi in x], pivot["long_short"].values, width, label="Long + Short", color="#a78bfa")
+    ax.axhline(0, color="#374151", linewidth=0.8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(coins, rotation=0)
+    ax.set_ylabel("수익률 (%)")
+    ax.set_title("시뮬 10 — 코인별 Long / Short / Long+Short (일봉, 최대 8.5년)")
+    ax.legend()
+    plt.tight_layout()
+    out = CHARTS / "10_longshort.png"
+    plt.savefig(out, dpi=140)
+    plt.close()
+    print(f"  → {out.name}")
+
+
 if __name__ == "__main__":
     for fn in [chart_02_mitigation, chart_03_horizon, chart_03_avg, chart_04_sizing,
                chart_05_grid_top, chart_05_per_coin, chart_06_interval_compare,
-               chart_07_daily_horizons, chart_08_cycle_freq, chart_09_cycle4h]:
+               chart_07_daily_horizons, chart_08_cycle_freq, chart_09_cycle4h,
+               chart_10_longshort]:
         try:
             fn()
         except FileNotFoundError as e:
