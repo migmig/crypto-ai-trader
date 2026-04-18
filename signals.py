@@ -12,11 +12,11 @@ BASE_DIR = Path(__file__).parent
 CONFIG = json.loads((BASE_DIR / "config.json").read_text())
 
 
-def _prev_macd_hist(candles_15m):
-    """직전 사이클 MACD 히스토그램 — 골든/데드 크로스 판단용."""
-    if len(candles_15m) < 36:
+def _prev_macd_hist(candles_1d):
+    """직전 일봉까지의 MACD 히스토그램 — 골든/데드 크로스 판단용."""
+    if len(candles_1d) < 36:
         return None
-    closes_prev = [c["close"] for c in candles_15m[:-1]]
+    closes_prev = [c["close"] for c in candles_1d[:-1]]
     _, _, prev_hist = calc_macd(
         closes_prev,
         CONFIG["indicators"]["macd_fast"],
@@ -27,41 +27,46 @@ def _prev_macd_hist(candles_15m):
 
 
 def classify(market, mdata, state_holding):
-    """단일 코인 신호 분류."""
+    """단일 코인 신호 분류. 일봉 지표 기반 (v5)."""
     ind = mdata.get("indicators", {})
     ticker = mdata.get("ticker", {})
 
     price = ticker.get("trade_price")
     change_pct = (ticker.get("signed_change_rate") or 0) * 100
+
+    # PRIMARY — 일봉 지표
+    rsi_1d = ind.get("rsi_1d")
+    macd_1d = ind.get("macd_1d") or {}
+    macd_hist_1d = macd_1d.get("histogram")
+    prev_hist_1d = ind.get("macd_prev_hist_1d")
+    bb_1d = ind.get("bollinger_1d") or {}
+    bb_upper = bb_1d.get("upper")
+    bb_lower = bb_1d.get("lower")
+    vol_ratio = ind.get("volume_ratio_1d")
+    trend = ind.get("trend_1d", "횡보")
+
+    # 보조 — 15m (AI 판단 컨텍스트)
     rsi_15m = ind.get("rsi_15m")
     rsi_1h = ind.get("rsi_1h")
-    rsi_1d = ind.get("rsi_1d")
-    macd_15m = ind.get("macd_15m") or {}
-    macd_hist_15m = macd_15m.get("histogram")
+    macd_hist_15m = (ind.get("macd_15m") or {}).get("histogram")
     macd_hist_1h = (ind.get("macd_1h") or {}).get("histogram")
-    bb = ind.get("bollinger_15m") or {}
-    bb_upper = bb.get("upper")
-    bb_lower = bb.get("lower")
-    vol_ratio = ind.get("volume_ratio_15m")
-    trend = ind.get("trend", "횡보")
 
-    prev_hist = _prev_macd_hist(mdata.get("candles_15m", []))
     macd_golden = (
-        prev_hist is not None
-        and macd_hist_15m is not None
-        and prev_hist < 0 <= macd_hist_15m
+        prev_hist_1d is not None
+        and macd_hist_1d is not None
+        and prev_hist_1d < 0 <= macd_hist_1d
     )
     macd_dead = (
-        prev_hist is not None
-        and macd_hist_15m is not None
-        and prev_hist > 0 >= macd_hist_15m
+        prev_hist_1d is not None
+        and macd_hist_1d is not None
+        and prev_hist_1d > 0 >= macd_hist_1d
     )
-    # v2: MACD 히스토그램이 음수에서 덜 음수로 전환 (반등 기미)
+    # 음수에서 덜 음수로 전환 (반등 기미)
     hist_rising_from_neg = (
-        prev_hist is not None
-        and macd_hist_15m is not None
-        and prev_hist < 0
-        and macd_hist_15m > prev_hist
+        prev_hist_1d is not None
+        and macd_hist_1d is not None
+        and prev_hist_1d < 0
+        and macd_hist_1d > prev_hist_1d
     )
 
     near_bb_lower = (
@@ -76,37 +81,36 @@ def classify(market, mdata, state_holding):
             "rule": "적극 매수",
             "signal": "buy_strong",
             "checks": [
-                ("RSI15m ≤ 35", rsi_15m is not None and rsi_15m <= 35, rsi_15m),
-                ("MACD 반등", macd_golden or hist_rising_from_neg,
-                 f"prev {prev_hist} → cur {macd_hist_15m}"),
-                ("거래량비율 ≥ 1.3", vol_ratio is not None and vol_ratio >= 1.3, vol_ratio),
+                ("RSI1d ≤ 35", rsi_1d is not None and rsi_1d <= 35, rsi_1d),
+                ("MACD(1d) 반등", macd_golden or hist_rising_from_neg,
+                 f"prev {prev_hist_1d} → cur {macd_hist_1d}"),
+                ("거래량비율 1d ≥ 1.3", vol_ratio is not None and vol_ratio >= 1.3, vol_ratio),
             ],
         },
         {
             "rule": "적극 매도",
             "signal": "sell_strong",
             "checks": [
-                ("RSI15m ≥ 70", rsi_15m is not None and rsi_15m >= 70, rsi_15m),
-                ("MACD 데드크로스", macd_dead, f"prev {prev_hist} → cur {macd_hist_15m}"),
+                ("RSI1d ≥ 70", rsi_1d is not None and rsi_1d >= 70, rsi_1d),
+                ("MACD(1d) 데드크로스", macd_dead, f"prev {prev_hist_1d} → cur {macd_hist_1d}"),
             ],
         },
         {
             "rule": "매수 고려",
             "signal": "buy",
             "checks": [
-                ("RSI15m ≤ 40", rsi_15m is not None and rsi_15m <= 40, rsi_15m),
-                ("볼린저 하단 근접", near_bb_lower, f"price {price} / lower {bb_lower}"),
-                ("추세≠하락", trend != "하락", trend),
-                ("일봉 과열 아님", rsi_1d is None or rsi_1d <= 65, rsi_1d),
+                ("RSI1d ≤ 40", rsi_1d is not None and rsi_1d <= 40, rsi_1d),
+                ("볼린저(1d) 하단 근접", near_bb_lower, f"price {price} / lower {bb_lower}"),
+                ("일봉 추세≠하락", trend != "하락", trend),
             ],
         },
         {
             "rule": "매도 고려",
             "signal": "sell",
             "checks": [
-                ("RSI15m ≥ 65", rsi_15m is not None and rsi_15m >= 65, rsi_15m),
-                ("볼린저 상단 근접", near_bb_upper, f"price {price} / upper {bb_upper}"),
-                ("추세=하락", trend == "하락", trend),
+                ("RSI1d ≥ 65", rsi_1d is not None and rsi_1d >= 65, rsi_1d),
+                ("볼린저(1d) 상단 근접", near_bb_upper, f"price {price} / upper {bb_upper}"),
+                ("일봉 추세=하락", trend == "하락", trend),
             ],
         },
     ]
@@ -129,13 +133,14 @@ def classify(market, mdata, state_holding):
         "coin": coin,
         "price": price,
         "change_pct": round(change_pct, 2),
-        "trend": trend,
+        "trend": trend,  # 일봉 추세
         "rsi": {"15m": rsi_15m, "1h": rsi_1h, "1d": rsi_1d},
+        "macd_hist_1d": macd_hist_1d,
+        "macd_prev_hist_1d": prev_hist_1d,
         "macd_hist_15m": macd_hist_15m,
         "macd_hist_1h": macd_hist_1h,
-        "macd_prev_hist_15m": prev_hist,
-        "volume_ratio_15m": vol_ratio,
-        "bb_15m": {"upper": bb_upper, "lower": bb_lower},
+        "volume_ratio_1d": vol_ratio,
+        "bb_1d": {"upper": bb_upper, "lower": bb_lower},
         "signal": signal,
         "matched_rule": matched["rule"] if matched else None,
     }
@@ -188,26 +193,37 @@ def build_actions(per_coin_map, state):
     max_pct = CONFIG["safety"]["max_single_trade_pct"]  # 0.30
     buy_pct = 0.10
 
+    # sell_strong 익절 조건 — 평단 대비 +X% 이상에서만 발동 (v5)
+    min_profit = CONFIG["safety"].get("sell_strong_min_profit_pct", 0.03)
+
     # 공평한 현금 배분을 위해 buy/buy_strong 코인 리스트 먼저 수집
     buy_orders = []
     sell_orders = []
     for market, pc in per_coin_map.items():
         sig = pc["signal"]
         note = _short_note(pc)
+        price = pc.get("price")
+        h = holdings.get(market, {})
+        avg = h.get("avg_price", 0)
+        profit_pct = ((price / avg) - 1) if (price and avg > 0) else 0
+
         if sig == "buy_strong":
             buy_orders.append((market, sig, max_pct, note))
         elif sig == "buy":
             buy_orders.append((market, sig, buy_pct, note))
         elif sig == "sell_strong":
-            sell_orders.append({
-                "action": "sell", "market": market, "sell_pct": 1.0,
-                "reason": f"[ALGO] 적극매도 - {note}",
-            })
+            if profit_pct >= min_profit:
+                sell_orders.append({
+                    "action": "sell", "market": market, "sell_pct": 1.0,
+                    "reason": f"[ALGO] 적극매도(익절 {profit_pct*100:+.1f}%) - {note}",
+                })
+            # 손실 구간이면 매도 보류 (v5 익절 전용)
         elif sig == "sell":
-            sell_orders.append({
-                "action": "sell", "market": market, "sell_pct": 0.5,
-                "reason": f"[ALGO] 부분매도 - {note}",
-            })
+            if profit_pct >= min_profit:
+                sell_orders.append({
+                    "action": "sell", "market": market, "sell_pct": 0.5,
+                    "reason": f"[ALGO] 부분매도(익절 {profit_pct*100:+.1f}%) - {note}",
+                })
 
     # 매수: 평가금액 × 비율, 남은 현금을 여러 주문이 나눠쓰도록 공평 분배
     remaining_cash = cash

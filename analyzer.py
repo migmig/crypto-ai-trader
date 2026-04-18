@@ -143,15 +143,55 @@ def analyze_market(market_data):
         macd, signal, hist = calc_macd(closes_1h, 12, 26, 9)
         indicators["macd_1h"] = {"macd": macd, "signal": signal, "histogram": hist}
 
-    # 일봉 기준 장기 지표
+    # 일봉 기준 (PRIMARY — 판단용)
     candles_1d = market_data.get("candles_1d", [])
     if candles_1d:
         closes_1d = [c["close"] for c in candles_1d]
         indicators["rsi_1d"] = calc_rsi(closes_1d, CONFIG["indicators"]["rsi_period"])
+
+        # MACD 1d (현재 + 직전 히스토그램 — 골든/데드 크로스 판단)
+        m, s, h = calc_macd(
+            closes_1d,
+            CONFIG["indicators"]["macd_fast"],
+            CONFIG["indicators"]["macd_slow"],
+            CONFIG["indicators"]["macd_signal"],
+        )
+        indicators["macd_1d"] = {"macd": m, "signal": s, "histogram": h}
+        if len(closes_1d) >= CONFIG["indicators"]["macd_slow"] + CONFIG["indicators"]["macd_signal"] + 1:
+            _, _, prev_h = calc_macd(
+                closes_1d[:-1],
+                CONFIG["indicators"]["macd_fast"],
+                CONFIG["indicators"]["macd_slow"],
+                CONFIG["indicators"]["macd_signal"],
+            )
+            indicators["macd_prev_hist_1d"] = prev_h
+
+        # BB 1d
+        bb_u, bb_m, bb_l = calc_bollinger(
+            closes_1d, CONFIG["indicators"]["bb_period"], CONFIG["indicators"]["bb_std"]
+        )
+        indicators["bollinger_1d"] = {"upper": bb_u, "middle": bb_m, "lower": bb_l}
+
+        # MA 1d
         for p in [5, 20]:
             indicators[f"ma{p}_1d"] = calc_ma(closes_1d, p)
 
-    # 추세 판단
+        # 거래량 비율 1d (20일 평균 대비)
+        indicators["volume_ratio_1d"] = calc_volume_ratio(candles_1d)
+
+        # 추세 1d (MA5 vs MA20 + 현재가)
+        ma5_1d = indicators.get("ma5_1d")
+        ma20_1d = indicators.get("ma20_1d")
+        cur = closes_1d[-1]
+        if ma5_1d and ma20_1d:
+            if ma5_1d > ma20_1d and cur > ma5_1d:
+                indicators["trend_1d"] = "상승"
+            elif ma5_1d < ma20_1d and cur < ma5_1d:
+                indicators["trend_1d"] = "하락"
+            else:
+                indicators["trend_1d"] = "횡보"
+
+    # 15분 추세 (UI·AI 판단용 보조)
     if candles_15m and len(candles_15m) >= 20:
         closes = [c["close"] for c in candles_15m]
         ma5 = calc_ma(closes, 5)

@@ -2,7 +2,7 @@
   "initial_capital": 10000000,
   "markets": ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-ADA", "KRW-SOL", "KRW-DOGE", "KRW-AVAX", "KRW-LINK", "KRW-DOT", "KRW-SUI"],
   "mode": "simulation",
-  "cycle_interval_minutes": 2,
+  "cycle_interval_minutes": 60,
   "fee_rate": 0.0005,
   "hybrid": {
     "always_call_ai": false,
@@ -10,11 +10,12 @@
   },
   "safety": {
     "max_single_trade_pct": 0.30,
-    "max_loss_pct": -0.15,
+    "max_loss_pct": -0.25,
     "max_single_coin_pct": 0.50,
-    "max_trades_per_day": 20,
-    "min_hold_minutes": 30,
-    "trailing_stop_pct": -0.07
+    "max_trades_per_day": 5,
+    "min_hold_minutes": 1440,
+    "trailing_stop_pct": -0.10,
+    "sell_strong_min_profit_pct": 0.03
   },
   "indicators": {
     "rsi_period": 14,

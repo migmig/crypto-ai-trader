@@ -112,8 +112,8 @@ def collect_all():
         entry["candles_1h"] = fetch_candles(market, "minute60", 48)
         time.sleep(0.1)
 
-        # 일봉 (30일)
-        entry["candles_1d"] = fetch_candles(market, "day", 30)
+        # 일봉 (100일 — 지표 워밍업 + 추세 판단)
+        entry["candles_1d"] = fetch_candles(market, "day", 100)
         time.sleep(0.1)
 
         # 호가
