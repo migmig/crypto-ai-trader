@@ -8,8 +8,30 @@ import ChartsPage from './pages/ChartsPage'
 import SimulationsPage from './pages/SimulationsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import ExplorerPage from './pages/ExplorerPage'
+import LoginPage from './pages/LoginPage'
 import TradeToaster from './components/TradeToaster'
 import { timeAgo } from './utils'
+import { useAuth } from './lib/auth'
+import { isSupabaseEnabled } from './lib/supabase'
+
+function UserMenu() {
+  const { user, signOut } = useAuth()
+  if (!isSupabaseEnabled() || !user) return null
+  const email = user.email || 'user'
+  return (
+    <div className="flex items-center gap-2">
+      <span className="hidden md:inline text-xs text-slate-400 tabular-nums">{email}</span>
+      <button
+        onClick={signOut}
+        className="bg-slate-800 border border-slate-700 text-slate-300 px-2 sm:px-3 py-1.5 rounded-lg text-sm hover:bg-slate-700 transition cursor-pointer"
+        title="로그아웃"
+      >
+        <span className="hidden sm:inline">Logout</span>
+        <span className="sm:hidden">⎋</span>
+      </button>
+    </div>
+  )
+}
 
 function ResetButton({ onReset }: { onReset: () => void }) {
   const [busy, setBusy] = useState(false)
@@ -57,6 +79,15 @@ function ResetButton({ onReset }: { onReset: () => void }) {
 }
 
 export default function App() {
+  const auth = useAuth()
+  // Supabase 연동되어 있고 로그인 안 됐으면 로그인 페이지 강제
+  if (isSupabaseEnabled() && !auth.loading && !auth.session) {
+    return <LoginPage />
+  }
+  return <AuthedApp />
+}
+
+function AuthedApp() {
   const {
     status, trades, performance, judgments, logs, loading, refresh,
     judgmentsTotal, judgmentsHasMore, loadMoreJudgments, judgmentsStats,
@@ -197,6 +228,7 @@ export default function App() {
             <span className="sm:hidden">↻</span>
           </button>
           <ResetButton onReset={refresh} />
+          <UserMenu />
         </div>
       </header>
 
