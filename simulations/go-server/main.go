@@ -416,8 +416,13 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 		if isSample {
 			holdVal := holdQty * price
 			holdCurve = append(holdCurve, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: holdVal, P: price})
-			dcaVal := dcaCash + dcaQty*price
-			dcaCurve = append(dcaCurve, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: dcaVal, P: price})
+			// DCA 정규화: 코인 가치 ÷ 투자원금 × cashInit
+			// → DCA가 ₩10M을 한번에 평단가로 매수한 것처럼 환산 (Hold와 비교 가능)
+			dcaNorm := cashInit
+			if dcaInvested > 0 {
+				dcaNorm = (dcaQty * price / dcaInvested) * cashInit
+			}
+			dcaCurve = append(dcaCurve, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: dcaNorm, P: price})
 		}
 
 		// 룰 백테스트는 cycle skip 주기로만 평가
@@ -529,13 +534,13 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 	holdPct := (holdExit/(holdEntryPrice/(1-feeRate)) - 1) * 100
 	holdFinal := holdQty * finalPrice
 
-	// DCA 최종
-	dcaFinal := dcaCash + dcaQty*finalPrice
-	var dcaPct float64
+	// DCA 최종 (정규화된 기준)
+	var dcaPct, dcaFinalNorm float64
+	dcaFinalNorm = cashInit
 	if dcaInvested > 0 {
-		// 투자 원금 대비 현재 코인 가치 (남은 현금 제외)
 		coinValue := dcaQty * finalPrice
 		dcaPct = (coinValue/dcaInvested - 1) * 100
+		dcaFinalNorm = (coinValue / dcaInvested) * cashInit
 	}
 
 	// 마지막 포인트 보장
@@ -547,7 +552,7 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 		holdCurve = append(holdCurve, EquityPoint{T: lastT, V: holdFinal, P: finalPrice})
 	}
 	if len(dcaCurve) == 0 || dcaCurve[len(dcaCurve)-1].T != lastT {
-		dcaCurve = append(dcaCurve, EquityPoint{T: lastT, V: dcaFinal, P: finalPrice})
+		dcaCurve = append(dcaCurve, EquityPoint{T: lastT, V: dcaFinalNorm, P: finalPrice})
 	}
 
 	return CoinResult{
