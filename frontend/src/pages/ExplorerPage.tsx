@@ -42,7 +42,11 @@ const DEFAULT_RULE = {
 
 type IntervalKey = typeof INTERVALS[number]
 
+const HORIZONS = [120, 240, 360] as const
+type Horizon = typeof HORIZONS[number]
+
 export default function ExplorerPage() {
+  const [horizon, setHorizon] = useState<Horizon>(120)
   const [data, setData] = useState<Record<IntervalKey, BacktestResponse | null>>({
     day: null, minute240: null, minute60: null, minute30: null,
   })
@@ -64,7 +68,7 @@ export default function ExplorerPage() {
           body: JSON.stringify({
             interval: iv,
             coins: COINS,
-            last_days: 120,
+            last_days: horizon,
             cycle_hours: iv === 'day' ? 24 : iv === 'minute240' ? 4 : iv === 'minute60' ? 1 : 0.5,
             rule: DEFAULT_RULE,
           }),
@@ -85,11 +89,13 @@ export default function ExplorerPage() {
       .catch((e) => { if (!cancelled) setError(String(e)) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [])
+  }, [horizon])
 
   return (
     <main className="max-w-7xl mx-auto p-3 sm:p-6 space-y-6 pb-24">
-      <Hero />
+      <Hero horizon={horizon} />
+
+      <HorizonTabs horizon={horizon} setHorizon={setHorizon} loading={loading} />
 
       <Controls visible={visible} setVisible={setVisible} />
 
@@ -101,7 +107,7 @@ export default function ExplorerPage() {
 
       {loading ? (
         <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
-          백테스트 실행 중… (3 코인 × 4 인터벌 = 12개 동시)
+          {horizon}일 백테스트 실행 중… (3 코인 × 4 인터벌 = 12개 동시)
         </div>
       ) : (
         COINS.map((coin) => <CoinSection key={coin} coin={coin} data={data} visible={visible} />)
@@ -110,18 +116,48 @@ export default function ExplorerPage() {
   )
 }
 
-function Hero() {
+function Hero({ horizon }: { horizon: Horizon }) {
   return (
     <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 sm:p-8">
       <div className="text-[11px] uppercase tracking-[0.24em] text-blue-400/80 font-semibold mb-2">
         Explorer · 동일 룰 × 4개 인터벌 비교
       </div>
-      <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">120일 구간 — 언제 사고 팔았을까?</h1>
+      <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">{horizon}일 구간 — 언제 사고 팔았을까?</h1>
       <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-3xl">
         BTC / ETH / ADA 3 코인에 v5 룰(backstop -25%, trailing -10%, sell_strong 익절 +3%) 동일 적용.
         캔들 인터벌(1일/4시간/1시간/30분)만 바꿔가며 매매 시점·자산 추이 차이 확인.
-        토글 버튼으로 특정 인터벌만 골라 볼 수 있습니다.
+        상단 <span className="text-slate-200">120일 / 240일 / 360일</span> 탭으로 구간 전환, 아래 토글로 특정 인터벌만 골라 볼 수 있습니다.
       </p>
+    </section>
+  )
+}
+
+function HorizonTabs({
+  horizon,
+  setHorizon,
+  loading,
+}: {
+  horizon: Horizon
+  setHorizon: (h: Horizon) => void
+  loading: boolean
+}) {
+  return (
+    <section className="flex gap-1 bg-slate-900/60 border border-slate-800 rounded-xl p-1 w-fit">
+      {HORIZONS.map((h) => (
+        <button
+          key={h}
+          onClick={() => !loading && setHorizon(h)}
+          disabled={loading && horizon !== h}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+            horizon === h
+              ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+        >
+          {h}일
+          {horizon === h && loading && <span className="ml-2 text-[10px] text-slate-500">로딩…</span>}
+        </button>
+      ))}
     </section>
   )
 }
