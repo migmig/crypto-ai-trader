@@ -190,12 +190,16 @@ function CoinSection({
     res: data[iv]?.per_coin.find((c) => c.coin === coin) || null,
   }))
 
-  // 가격 라인의 기준 — day 데이터 사용 (120 points, 일 1개)
+  // 가격 라인의 기준 — day 데이터 사용 (120 points)
   const priceRef = perInterval.find((p) => p.interval === 'day')?.res
-  const priceCurve = priceRef?.equity_curve.map((p) => ({ t: p.t, price: p.p })) ?? []
+  const priceCurve = priceRef?.equity_curve.map((p) => ({
+    ts: new Date(p.t).getTime(),
+    date: p.t.slice(0, 10),
+    price: p.p,
+  })) ?? []
 
-  // 날짜(YYYY-MM-DD) → priceCurve의 full timestamp 매핑 (ReferenceDot x 값 스냅용)
-  const dayTsMap = new Map(priceCurve.map((p) => [p.t.slice(0, 10), p.t]))
+  // 날짜(YYYY-MM-DD) → priceCurve의 ts(number) 매핑 (ReferenceDot x 스냅용)
+  const dayTsMap = new Map(priceCurve.map((p) => [p.date, p.ts]))
 
   return (
     <section id={coin} className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 sm:p-7 space-y-5 scroll-mt-20">
@@ -232,13 +236,25 @@ function CoinSection({
         <ResponsiveContainer width="100%" height={340}>
           <LineChart data={priceCurve} margin={{ top: 8, right: 20, left: 0, bottom: 4 }}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="t" tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false}
-                   tickFormatter={(v: string) => v.slice(5, 10)} />
+            <XAxis
+              dataKey="ts"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v: number) => {
+                const d = new Date(v)
+                return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+              }}
+            />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false}
                    tickFormatter={(v) => v >= 100000000 ? `${(v / 100000000).toFixed(2)}억` : v >= 10000 ? `${(v / 10000).toFixed(0)}만` : v.toFixed(0)}
                    domain={['auto', 'auto']} />
-            <Tooltip content={<CustomTooltip />} />
-            <Line type="monotone" dataKey="price" stroke="#64748b" strokeWidth={1.5} dot={false} name="종가" />
+            <Tooltip content={<CustomTooltip />}
+                     labelFormatter={(v: any) => typeof v === 'number' ? new Date(v).toLocaleString('ko-KR') : String(v)} />
+            <Line type="monotone" dataKey="price" stroke="#64748b" strokeWidth={1.5} dot={false} name="종가" isAnimationActive={false} />
             {perInterval.map(({ interval, res }) => {
               if (!res || !visible[interval]) return null
               return res.trades.map((tr, i) => {
@@ -273,29 +289,46 @@ function CoinSection({
           <LineChart margin={{ top: 8, right: 20, left: 0, bottom: 4 }}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             <XAxis
-              dataKey="t"
-              type="category"
-              allowDuplicatedCategory={false}
+              dataKey="ts"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
               tick={{ fill: '#64748b', fontSize: 10 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: string) => v.slice(5, 10)}
+              tickFormatter={(v: number) => {
+                const d = new Date(v)
+                return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+              }}
             />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false}
-                   tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} domain={['auto', 'auto']} />
-            <Tooltip content={<CustomTooltip />} />
+            <YAxis
+              tick={{ fill: '#94a3b8', fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+              domain={['auto', 'auto']}
+            />
+            <Tooltip
+              content={<CustomTooltip />}
+              labelFormatter={(v: any) => typeof v === 'number' ? new Date(v).toLocaleString('ko-KR') : String(v)}
+            />
             <Legend />
             {perInterval.map(({ interval, res }) => {
               if (!res || !visible[interval]) return null
+              const data = res.equity_curve.map((p) => ({
+                ts: new Date(p.t).getTime(),
+                [interval]: p.v,
+              }))
               return (
                 <Line
                   key={interval}
-                  data={res.equity_curve.map((p) => ({ t: p.t, [interval]: p.v }))}
+                  data={data}
                   type="monotone"
                   dataKey={interval}
                   stroke={INTERVAL_COLOR[interval]}
                   strokeWidth={2}
                   dot={false}
+                  isAnimationActive={false}
                   name={INTERVAL_LABEL[interval]}
                 />
               )
