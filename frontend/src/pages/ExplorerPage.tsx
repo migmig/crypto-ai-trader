@@ -267,7 +267,9 @@ function CoinSection({
       <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-200">가격 차트 (일봉 기준 120일) + 매매 시점</h3>
-          <span className="text-[11px] text-slate-500">▲ 매수 ▽ 매도 · 색상 = 인터벌</span>
+          <span className="text-[11px] text-slate-500">
+            <span className="text-emerald-400">▲ 매수</span>(가격선 위, 채움) · <span className="text-red-400">▽ 매도</span>(가격선 아래, 외곽선) · 색상 = 인터벌
+          </span>
         </div>
         <ResponsiveContainer width="100%" height={340}>
           <LineChart data={priceCurve} margin={{ top: 8, right: 20, left: 0, bottom: 4 }}>
@@ -296,17 +298,16 @@ function CoinSection({
               return res.trades.map((tr, i) => {
                 const snappedT = dayTsMap.get(tr.t.slice(0, 10))
                 if (!snappedT) return null
-                const isBuy = tr.action === 'buy'
+                const color = INTERVAL_COLOR[interval]
                 return (
                   <ReferenceDot
                     key={`${interval}-${i}`}
                     x={snappedT}
                     y={tr.price}
-                    r={5}
-                    fill={INTERVAL_COLOR[interval]}
-                    fillOpacity={isBuy ? 0.85 : 0.25}
-                    stroke={INTERVAL_COLOR[interval]}
-                    strokeWidth={isBuy ? 0 : 2}
+                    r={0}
+                    shape={(props: any) => (
+                      <TradeMarker cx={props.cx} cy={props.cy} color={color} action={tr.action} />
+                    )}
                   />
                 )
               })
@@ -436,4 +437,39 @@ function CustomTooltip({ active, label, payload }: any) {
 
 function fmtPct(n: number) {
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`
+}
+
+function TradeMarker({
+  cx, cy, color, action,
+}: {
+  cx?: number
+  cy?: number
+  color: string
+  action: string
+}) {
+  if (typeof cx !== 'number' || typeof cy !== 'number') return null
+  const isBuy = action === 'buy'
+  const size = 9 // 삼각형 반지름
+  // 매수: 위를 향한 삼각형 (매수 지점 ABOVE 가격선)
+  // 매도: 아래를 향한 삼각형 (매도 지점 BELOW 가격선) + 외곽선
+  const offset = isBuy ? -6 : 6 // 가격선과 조금 떨어뜨려 겹침 방지
+  const path = isBuy
+    // 위 방향 △ : 아래로 offset
+    ? `M ${cx} ${cy + offset - size} L ${cx - size} ${cy + offset + size * 0.7} L ${cx + size} ${cy + offset + size * 0.7} Z`
+    // 아래 방향 ▽
+    : `M ${cx} ${cy + offset + size} L ${cx - size} ${cy + offset - size * 0.7} L ${cx + size} ${cy + offset - size * 0.7} Z`
+  return (
+    <g pointerEvents="none">
+      {/* 외곽 어두운 테두리 (대비용) */}
+      <path d={path} fill="#0b1220" stroke="#0b1220" strokeWidth={4} strokeLinejoin="round" />
+      {/* 실제 마커 */}
+      <path
+        d={path}
+        fill={isBuy ? color : 'transparent'}
+        stroke={color}
+        strokeWidth={isBuy ? 1.2 : 2.2}
+        strokeLinejoin="round"
+      />
+    </g>
+  )
 }
