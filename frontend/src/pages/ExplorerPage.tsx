@@ -14,6 +14,10 @@ interface CoinResult {
   n_sells: number
   final_krw: number
   hold_pnl_pct: number
+  hold_curve: EquityPoint[]
+  dca_pnl_pct: number
+  dca_curve: EquityPoint[]
+  dca_invested: number
   equity_curve: EquityPoint[]
   trades: TradeEvent[]
 }
@@ -56,6 +60,9 @@ export default function ExplorerPage() {
   const [visible, setVisible] = useState<Record<IntervalKey, boolean>>({
     day: true, minute240: true, minute60: true, minute30: true,
   })
+  // 기준선 (Buy&Hold / DCA) 표시
+  const [showHold, setShowHold] = useState(true)
+  const [showDCA, setShowDCA] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -97,7 +104,14 @@ export default function ExplorerPage() {
 
       <HorizonTabs horizon={horizon} setHorizon={setHorizon} loading={loading} />
 
-      <Controls visible={visible} setVisible={setVisible} />
+      <Controls
+        visible={visible}
+        setVisible={setVisible}
+        showHold={showHold}
+        setShowHold={setShowHold}
+        showDCA={showDCA}
+        setShowDCA={setShowDCA}
+      />
 
       {error && (
         <div className="bg-red-950/30 border border-red-700/40 rounded-xl p-4 text-sm text-red-300">
@@ -110,7 +124,16 @@ export default function ExplorerPage() {
           {horizon}일 백테스트 실행 중… (3 코인 × 4 인터벌 = 12개 동시)
         </div>
       ) : (
-        COINS.map((coin) => <CoinSection key={coin} coin={coin} data={data} visible={visible} />)
+        COINS.map((coin) => (
+          <CoinSection
+            key={coin}
+            coin={coin}
+            data={data}
+            visible={visible}
+            showHold={showHold}
+            showDCA={showDCA}
+          />
+        ))
       )}
     </main>
   )
@@ -162,50 +185,57 @@ function HorizonTabs({
   )
 }
 
+const HOLD_COLOR = '#64748b'
+const DCA_COLOR = '#ec4899'
+
 function Controls({
   visible,
   setVisible,
+  showHold,
+  setShowHold,
+  showDCA,
+  setShowDCA,
 }: {
   visible: Record<IntervalKey, boolean>
   setVisible: (v: Record<IntervalKey, boolean>) => void
+  showHold: boolean
+  setShowHold: (v: boolean) => void
+  showDCA: boolean
+  setShowDCA: (v: boolean) => void
 }) {
+  const toggleBtn = (label: string, color: string, on: boolean, onClick: () => void) => (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+        on ? 'text-white' : 'text-slate-500 border-slate-700 bg-slate-950/50'
+      }`}
+      style={on ? { borderColor: color, background: `${color}22` } : undefined}
+    >
+      <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ background: on ? color : '#4b5563' }} />
+      {label}
+    </button>
+  )
+
   return (
-    <section className="sticky top-2 z-10 bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-3 sm:p-4">
+    <section className="sticky top-2 z-10 bg-slate-900/80 backdrop-blur border border-slate-800 rounded-2xl p-3 sm:p-4 space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">인터벌 표시</span>
-        {INTERVALS.map((iv) => {
-          const on = visible[iv]
-          return (
-            <button
-              key={iv}
-              onClick={() => setVisible({ ...visible, [iv]: !on })}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                on
-                  ? 'text-white border-current'
-                  : 'text-slate-500 border-slate-700 bg-slate-950/50'
-              }`}
-              style={on ? { borderColor: INTERVAL_COLOR[iv], background: `${INTERVAL_COLOR[iv]}22` } : undefined}
-            >
-              <span
-                className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
-                style={{ background: on ? INTERVAL_COLOR[iv] : '#4b5563' }}
-              />
-              {INTERVAL_LABEL[iv]}
-            </button>
-          )
-        })}
+        <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold w-[72px]">룰 인터벌</span>
+        {INTERVALS.map((iv) =>
+          toggleBtn(INTERVAL_LABEL[iv], INTERVAL_COLOR[iv], visible[iv], () => setVisible({ ...visible, [iv]: !visible[iv] })),
+        )}
         <button
           onClick={() => setVisible({ day: true, minute240: true, minute60: true, minute30: true })}
           className="ml-auto text-xs text-slate-400 hover:text-white px-2 py-1 rounded border border-slate-700 hover:border-slate-500"
-        >
-          전체 보기
-        </button>
+        >전체 보기</button>
         <button
           onClick={() => setVisible({ day: false, minute240: false, minute60: false, minute30: false })}
           className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded border border-slate-700 hover:border-slate-500"
-        >
-          전체 숨김
-        </button>
+        >전체 숨김</button>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold w-[72px]">기준선</span>
+        {toggleBtn('Buy & Hold', HOLD_COLOR, showHold, () => setShowHold(!showHold))}
+        {toggleBtn('DCA ₩10k/일', DCA_COLOR, showDCA, () => setShowDCA(!showDCA))}
       </div>
     </section>
   )
@@ -215,10 +245,14 @@ function CoinSection({
   coin,
   data,
   visible,
+  showHold,
+  showDCA,
 }: {
   coin: string
   data: Record<IntervalKey, BacktestResponse | null>
   visible: Record<IntervalKey, boolean>
+  showHold: boolean
+  showDCA: boolean
 }) {
   // 각 인터벌에서 해당 코인 결과 추출
   const perInterval = INTERVALS.map((iv) => ({
@@ -370,6 +404,34 @@ function CoinSection({
                 />
               )
             })}
+            {/* Buy & Hold 기준선 — day 인터벌 기준 */}
+            {showHold && priceRef?.hold_curve && (
+              <Line
+                data={priceRef.hold_curve.map((p) => ({ ts: new Date(p.t).getTime(), hold: p.v }))}
+                type="monotone"
+                dataKey="hold"
+                stroke={HOLD_COLOR}
+                strokeWidth={2}
+                strokeDasharray="5 3"
+                dot={false}
+                isAnimationActive={false}
+                name="Buy & Hold"
+              />
+            )}
+            {/* DCA 기준선 — day 인터벌 기준 */}
+            {showDCA && priceRef?.dca_curve && (
+              <Line
+                data={priceRef.dca_curve.map((p) => ({ ts: new Date(p.t).getTime(), dca: p.v }))}
+                type="monotone"
+                dataKey="dca"
+                stroke={DCA_COLOR}
+                strokeWidth={2}
+                strokeDasharray="2 3"
+                dot={false}
+                isAnimationActive={false}
+                name="DCA ₩10k/일"
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -409,6 +471,38 @@ function CoinSection({
                 </tr>
               )
             })}
+            {/* 기준선 행 */}
+            {priceRef && (
+              <>
+                <tr className="border-t-2 border-slate-800 bg-slate-950/40">
+                  <td className="py-2 px-3 font-medium" style={{ color: HOLD_COLOR }}>Buy & Hold</td>
+                  <td className={`py-2 px-3 text-right tabular-nums ${priceRef.hold_pnl_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {fmtPct(priceRef.hold_pnl_pct)}
+                  </td>
+                  <td className="py-2 px-3 text-right text-slate-600">-</td>
+                  <td className="py-2 px-3 text-right text-slate-600">-</td>
+                  <td className="py-2 px-3 text-right text-slate-400">1</td>
+                  <td className="py-2 px-3 text-right text-slate-400">0</td>
+                  <td className="py-2 px-3 text-right tabular-nums text-slate-200">
+                    {priceRef.hold_curve?.length ? Math.round(priceRef.hold_curve[priceRef.hold_curve.length - 1].v).toLocaleString() : '-'}
+                  </td>
+                </tr>
+                <tr className="border-t border-slate-800/60 bg-slate-950/40">
+                  <td className="py-2 px-3 font-medium" style={{ color: DCA_COLOR }}>DCA ₩10k/일</td>
+                  <td className={`py-2 px-3 text-right tabular-nums ${priceRef.dca_pnl_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {fmtPct(priceRef.dca_pnl_pct)}
+                    <span className="text-slate-500 ml-1 text-[10px]">(원금 ₩{Math.round(priceRef.dca_invested / 10000)}만)</span>
+                  </td>
+                  <td className="py-2 px-3 text-right text-slate-600">-</td>
+                  <td className="py-2 px-3 text-right text-slate-600">-</td>
+                  <td className="py-2 px-3 text-right text-slate-400">{Math.round(priceRef.dca_invested / 10000)}</td>
+                  <td className="py-2 px-3 text-right text-slate-400">0</td>
+                  <td className="py-2 px-3 text-right tabular-nums text-slate-200">
+                    {priceRef.dca_curve?.length ? Math.round(priceRef.dca_curve[priceRef.dca_curve.length - 1].v).toLocaleString() : '-'}
+                  </td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
       </div>

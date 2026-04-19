@@ -286,15 +286,19 @@ type TradeEvent struct {
 }
 
 type CoinResult struct {
-	Coin        string        `json:"coin"`
-	PnLPct      float64       `json:"pnl_pct"`
-	MaxDD       float64       `json:"max_dd_pct"`
-	NBuys       int           `json:"n_buys"`
-	NSells      int           `json:"n_sells"`
-	Final       float64       `json:"final_krw"`
-	HoldPct     float64       `json:"hold_pnl_pct"`
-	Equity      []EquityPoint `json:"equity_curve"`
-	Trades      []TradeEvent  `json:"trades"`
+	Coin       string        `json:"coin"`
+	PnLPct     float64       `json:"pnl_pct"`
+	MaxDD      float64       `json:"max_dd_pct"`
+	NBuys      int           `json:"n_buys"`
+	NSells     int           `json:"n_sells"`
+	Final      float64       `json:"final_krw"`
+	HoldPct    float64       `json:"hold_pnl_pct"`
+	HoldCurve  []EquityPoint `json:"hold_curve"`
+	DCAPct     float64       `json:"dca_pnl_pct"`
+	DCACurve   []EquityPoint `json:"dca_curve"`
+	DCAInvested float64      `json:"dca_invested"`
+	Equity     []EquityPoint `json:"equity_curve"`
+	Trades     []TradeEvent  `json:"trades"`
 }
 
 type BacktestResponse struct {
@@ -353,6 +357,9 @@ func signalAt(i int, cs []Candle, ind Indicators) signal {
 	return sigHold
 }
 
+// DCA 금액 (원)
+const dcaAmountKRW = 10_000
+
 func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, maxTrades int) CoinResult {
 	cs, ind := ds.Candles, ds.Ind
 	if startIdx < 40 {
@@ -365,20 +372,58 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 	maxDD := 0.0
 	var lastTrade time.Time
 	minHold := time.Duration(rule.MinHoldMinutes) * time.Minute
+
+	// ─── Buy&Hold 기준선: 시작점에 cashInit 전액 매수 ───
+	holdEntryPrice := cs[startIdx].Close
+	holdQty := cashInit / holdEntryPrice * (1 - feeRate)
+
+	// ─── DCA 기준선: 하루 1회 ₩10k 매수 ───
+	ivMinutes := 1 // 기본 (day 기준)
+	if ds != nil && len(cs) > 1 {
+		diff := cs[1].T.Sub(cs[0].T).Minutes()
+		if diff > 0 {
+			ivMinutes = int(diff)
+		}
+	}
+	dcaStep := 1440 / ivMinutes // 하루 간격으로 매수할 candle 수
+	if dcaStep < 1 {
+		dcaStep = 1
+	}
+	var dcaCash = cashInit // DCA 전용 가상 지갑 (cashInit 안에서 ₩10k씩 투입)
+	var dcaQty, dcaInvested float64
+
 	// equity curve 저장 (200점으로 다운샘플)
 	totalPts := len(cs) - startIdx
 	stride := 1
 	if totalPts > 200 {
 		stride = totalPts / 200
 	}
-	var eq []EquityPoint
+	var eq, holdCurve, dcaCurve []EquityPoint
 	var trades []TradeEvent
 
 	for i := startIdx; i < len(cs); i++ {
+		price := cs[i].Close
+
+		// ─── DCA: 매 dcaStep candle마다 ₩10k 매수 ───
+		if (i-startIdx)%dcaStep == 0 && dcaCash >= dcaAmountKRW {
+			dcaQty += dcaAmountKRW / price * (1 - feeRate)
+			dcaCash -= dcaAmountKRW
+			dcaInvested += dcaAmountKRW
+		}
+
+		// 샘플링 포인트엔 세 기준 모두 equity 기록
+		isSample := (i-startIdx)%stride == 0
+		if isSample {
+			holdVal := holdQty * price
+			holdCurve = append(holdCurve, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: holdVal, P: price})
+			dcaVal := dcaCash + dcaQty*price
+			dcaCurve = append(dcaCurve, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: dcaVal, P: price})
+		}
+
+		// 룰 백테스트는 cycle skip 주기로만 평가
 		if (i-startIdx)%skip != 0 {
 			continue
 		}
-		price := cs[i].Close
 		equity := cash + qty*price
 		if equity > peakEq {
 			peakEq = equity
@@ -387,7 +432,7 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 		if dd < maxDD {
 			maxDD = dd
 		}
-		if (i-startIdx)%stride == 0 {
+		if isSample {
 			eq = append(eq, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: equity, P: price})
 		}
 
@@ -476,23 +521,42 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 		}
 	}
 
-	final := cash + qty*cs[len(cs)-1].Close
-	// hold baseline
-	holdEntry := cs[startIdx].Close
-	holdExit := cs[len(cs)-1].Close
-	holdPct := ((holdExit*(1-feeRate))/(holdEntry/(1-feeRate)) - 1) * 100
+	finalPrice := cs[len(cs)-1].Close
+	final := cash + qty*finalPrice
+
+	// Buy&Hold 최종
+	holdExit := finalPrice * (1 - feeRate)
+	holdPct := (holdExit/(holdEntryPrice/(1-feeRate)) - 1) * 100
+	holdFinal := holdQty * finalPrice
+
+	// DCA 최종
+	dcaFinal := dcaCash + dcaQty*finalPrice
+	var dcaPct float64
+	if dcaInvested > 0 {
+		// 투자 원금 대비 현재 코인 가치 (남은 현금 제외)
+		coinValue := dcaQty * finalPrice
+		dcaPct = (coinValue/dcaInvested - 1) * 100
+	}
 
 	// 마지막 포인트 보장
-	lastPrice := cs[len(cs)-1].Close
-	if len(eq) == 0 || eq[len(eq)-1].T != cs[len(cs)-1].T.Format("2006-01-02T15:04:05") {
-		eq = append(eq, EquityPoint{T: cs[len(cs)-1].T.Format("2006-01-02T15:04:05"), V: final, P: lastPrice})
+	lastT := cs[len(cs)-1].T.Format("2006-01-02T15:04:05")
+	if len(eq) == 0 || eq[len(eq)-1].T != lastT {
+		eq = append(eq, EquityPoint{T: lastT, V: final, P: finalPrice})
+	}
+	if len(holdCurve) == 0 || holdCurve[len(holdCurve)-1].T != lastT {
+		holdCurve = append(holdCurve, EquityPoint{T: lastT, V: holdFinal, P: finalPrice})
+	}
+	if len(dcaCurve) == 0 || dcaCurve[len(dcaCurve)-1].T != lastT {
+		dcaCurve = append(dcaCurve, EquityPoint{T: lastT, V: dcaFinal, P: finalPrice})
 	}
 
 	return CoinResult{
 		PnLPct:  (final/cashInit - 1) * 100,
 		MaxDD:   maxDD * 100,
 		NBuys:   nBuys, NSells: nSells, Final: final,
-		HoldPct: holdPct, Equity: eq, Trades: trades,
+		HoldPct: holdPct, HoldCurve: holdCurve,
+		DCAPct:  dcaPct, DCACurve: dcaCurve, DCAInvested: dcaInvested,
+		Equity:  eq, Trades: trades,
 	}
 }
 
