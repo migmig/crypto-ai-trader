@@ -7,6 +7,7 @@ import LogsPage from './pages/LogsPage'
 import ChartsPage from './pages/ChartsPage'
 import SimulationsPage from './pages/SimulationsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
+import ExplorerPage from './pages/ExplorerPage'
 import { timeAgo } from './utils'
 
 function ResetButton({ onReset }: { onReset: () => void }) {
@@ -143,6 +144,18 @@ export default function App() {
               Playground
             </NavLink>
             <NavLink
+              to="/explorer"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                }`
+              }
+            >
+              Explorer
+            </NavLink>
+            <NavLink
               to="/logs"
               className={({ isActive }) =>
                 `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
@@ -226,6 +239,10 @@ export default function App() {
         <Route
           path="/playground"
           element={<PlaygroundPage />}
+        />
+        <Route
+          path="/explorer"
+          element={<ExplorerPage />}
         />
         <Route
           path="/logs"

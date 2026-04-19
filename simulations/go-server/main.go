@@ -274,6 +274,7 @@ type BacktestRequest struct {
 type EquityPoint struct {
 	T string  `json:"t"`
 	V float64 `json:"v"`
+	P float64 `json:"p"` // 해당 시점 종가 (가격 차트 overlay용)
 }
 
 type TradeEvent struct {
@@ -387,7 +388,7 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 			maxDD = dd
 		}
 		if (i-startIdx)%stride == 0 {
-			eq = append(eq, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: equity})
+			eq = append(eq, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: equity, P: price})
 		}
 
 		avg := 0.0
@@ -482,8 +483,9 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 	holdPct := ((holdExit*(1-feeRate))/(holdEntry/(1-feeRate)) - 1) * 100
 
 	// 마지막 포인트 보장
+	lastPrice := cs[len(cs)-1].Close
 	if len(eq) == 0 || eq[len(eq)-1].T != cs[len(cs)-1].T.Format("2006-01-02T15:04:05") {
-		eq = append(eq, EquityPoint{T: cs[len(cs)-1].T.Format("2006-01-02T15:04:05"), V: final})
+		eq = append(eq, EquityPoint{T: cs[len(cs)-1].T.Format("2006-01-02T15:04:05"), V: final, P: lastPrice})
 	}
 
 	return CoinResult{

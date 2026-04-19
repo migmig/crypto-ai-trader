@@ -335,6 +335,7 @@ def api_logs():
 @app.route("/charts")
 @app.route("/simulations")
 @app.route("/playground")
+@app.route("/explorer")
 def spa_fallback():
     return send_from_directory(str(DIST_DIR), "index.html")
 
