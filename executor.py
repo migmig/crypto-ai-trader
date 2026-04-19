@@ -38,6 +38,22 @@ def load_state():
 
 def save_state(state):
     (BASE_DIR / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))
+    # Supabase dual-write
+    try:
+        import db as _pg
+        if _pg.enabled():
+            from datetime import datetime as _dt
+            ltt = state.get("last_trade_time")
+            _pg.upsert_state(
+                initial_capital=state.get("initial_capital", 10_000_000),
+                cash=state.get("cash", 0),
+                holdings=state.get("holdings", {}),
+                total_trades_today=state.get("total_trades_today", 0),
+                last_trade_time=_dt.fromisoformat(ltt) if ltt else None,
+                today_date=state.get("today_date"),
+            )
+    except Exception:
+        pass
 
 
 def load_action():
@@ -63,20 +79,33 @@ def get_current_price(market):
 
 
 def log_trade(action, market, qty, price, amount, reason, result):
-    """거래 로그 기록"""
+    """거래 로그 기록. CSV + Supabase dual-write."""
     log_path = BASE_DIR / "trade_log.csv"
     is_new = not log_path.exists()
+    fee = amount * CONFIG['fee_rate']
+    ts = datetime.now()
     with open(log_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if is_new:
             writer.writerow(["timestamp", "action", "market", "qty", "price", "amount_krw", "fee", "reason", "result", "cash_after"])
         writer.writerow([
-            datetime.now().isoformat(),
+            ts.isoformat(),
             action, market,
             f"{qty:.8f}", f"{price:.0f}", f"{amount:.0f}",
-            f"{amount * CONFIG['fee_rate']:.0f}",
+            f"{fee:.0f}",
             reason, result, ""
         ])
+    # Supabase (실패해도 CSV는 유지)
+    try:
+        import db as _pg
+        if _pg.enabled():
+            _pg.insert_trade(
+                action=action, market=market,
+                qty=qty, price=price, amount_krw=amount, fee=fee,
+                reason=reason, result=result, ts=ts,
+            )
+    except Exception:
+        pass
 
 
 def log_performance(state):
@@ -93,19 +122,33 @@ def log_performance(state):
     pl = total - state["initial_capital"]
     pl_pct = pl / state["initial_capital"] if state["initial_capital"] > 0 else 0
 
+    ts = datetime.now()
+    num_holdings = len([h for h in state["holdings"].values() if h["qty"] > 0])
     with open(perf_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if is_new:
             writer.writerow(["timestamp", "cash", "holdings_value", "total_value", "pl_krw", "pl_pct", "num_holdings"])
         writer.writerow([
-            datetime.now().isoformat(),
+            ts.isoformat(),
             f"{state['cash']:.0f}",
             f"{total - state['cash']:.0f}",
             f"{total:.0f}",
             f"{pl:.0f}",
             f"{pl_pct:.4f}",
-            len([h for h in state["holdings"].values() if h["qty"] > 0]),
+            num_holdings,
         ])
+    # Supabase dual-write
+    try:
+        import db as _pg
+        if _pg.enabled():
+            _pg.insert_performance(
+                ts=ts, cash=state["cash"],
+                holdings_value=total - state["cash"],
+                total_value=total, pl_krw=pl, pl_pct=pl_pct,
+                num_holdings=num_holdings,
+            )
+    except Exception:
+        pass
 
 
 def check_safety(state, action_item):

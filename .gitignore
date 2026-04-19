@@ -24,4 +24,6 @@ simulations/go-server/go-server
 simulations/go-longshort/go-longshort
 .env
 .env.local
+frontend/.env.local
+frontend/.env
 

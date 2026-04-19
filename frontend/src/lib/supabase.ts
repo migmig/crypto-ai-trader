@@ -1,0 +1,13 @@
+import { createClient } from '@supabase/supabase-js'
+
+const url = (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined
+const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined
+
+export const supabase = url && anon ? createClient(url, anon, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { params: { eventsPerSecond: 10 } },
+}) : null
+
+export function isSupabaseEnabled() {
+  return supabase !== null
+}

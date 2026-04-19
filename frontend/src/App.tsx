@@ -8,6 +8,7 @@ import ChartsPage from './pages/ChartsPage'
 import SimulationsPage from './pages/SimulationsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import ExplorerPage from './pages/ExplorerPage'
+import TradeToaster from './components/TradeToaster'
 import { timeAgo } from './utils'
 
 function ResetButton({ onReset }: { onReset: () => void }) {
@@ -71,6 +72,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-gray-200">
+      <TradeToaster />
       <header className="bg-gray-900 border-b border-gray-800 px-3 sm:px-6 py-3 flex flex-wrap items-center gap-3 justify-between">
         <div className="flex items-center gap-3 sm:gap-6 flex-wrap">
           <h1 className="text-lg sm:text-xl font-bold shrink-0">

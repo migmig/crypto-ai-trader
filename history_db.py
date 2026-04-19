@@ -43,7 +43,8 @@ def get_db() -> sqlite3.Connection:
 
 
 def insert_judgment(data: dict, conn: Optional[sqlite3.Connection] = None) -> bool:
-    """판단 1건 삽입. 중복(timestamp+source)은 무시. 성공 시 True."""
+    """판단 1건 삽입. 중복(timestamp+source)은 무시. 성공 시 True.
+    Supabase 연동 활성 시 action_history 테이블에도 dual-write."""
     own_conn = conn is None
     if own_conn:
         conn = get_db()
@@ -65,6 +66,13 @@ def insert_judgment(data: dict, conn: Optional[sqlite3.Connection] = None) -> bo
         )
         if own_conn:
             conn.commit()
+        # Supabase dual-write (실패해도 로컬 저장은 유지)
+        try:
+            import db as _pg
+            if _pg.enabled():
+                _pg.insert_action(data)
+        except Exception:
+            pass
         return True
     finally:
         if own_conn:
