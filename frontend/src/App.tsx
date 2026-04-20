@@ -8,6 +8,7 @@ import ChartsPage from './pages/ChartsPage'
 import SimulationsPage from './pages/SimulationsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
 import ExplorerPage from './pages/ExplorerPage'
+import ReversePage from './pages/ReversePage'
 import LoginPage from './pages/LoginPage'
 import TradeToaster from './components/TradeToaster'
 import { timeAgo } from './utils'
@@ -189,6 +190,18 @@ function AuthedApp() {
               Explorer
             </NavLink>
             <NavLink
+              to="/reverse"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-orange-600/20 text-orange-400 border border-orange-500/40'
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                }`
+              }
+            >
+              Reverse
+            </NavLink>
+            <NavLink
               to="/logs"
               className={({ isActive }) =>
                 `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
@@ -277,6 +290,10 @@ function AuthedApp() {
         <Route
           path="/explorer"
           element={<ExplorerPage />}
+        />
+        <Route
+          path="/reverse"
+          element={<ReversePage />}
         />
         <Route
           path="/logs"

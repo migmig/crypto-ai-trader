@@ -269,6 +269,7 @@ type BacktestRequest struct {
 	CycleHours float64  `json:"cycle_hours"`
 	CashInit   float64  `json:"cash_init"`
 	Rule       Rule     `json:"rule"`
+	Reverse    bool     `json:"reverse"` // true → 매수↔매도 신호 반전
 }
 
 type EquityPoint struct {
@@ -360,7 +361,21 @@ func signalAt(i int, cs []Candle, ind Indicators) signal {
 // DCA 금액 (원)
 const dcaAmountKRW = 10_000
 
-func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, maxTrades int) CoinResult {
+func reverseSignal(s signal) signal {
+	switch s {
+	case sigBuyStrong:
+		return sigSellStrong
+	case sigBuy:
+		return sigSell
+	case sigSellStrong:
+		return sigBuyStrong
+	case sigSell:
+		return sigBuy
+	}
+	return sigHold
+}
+
+func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, maxTrades int, reverse bool) CoinResult {
 	cs, ind := ds.Candles, ds.Ind
 	if startIdx < 40 {
 		startIdx = 40
@@ -452,6 +467,9 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 			continue
 		}
 		sig := signalAt(i, cs, ind)
+		if reverse {
+			sig = reverseSignal(sig)
+		}
 
 		// 매도
 		if qty > 0 {
@@ -688,7 +706,7 @@ func handleBacktest(w http.ResponseWriter, r *http.Request) {
 		if startIdx < 40 {
 			startIdx = 40
 		}
-		res := backtestOne(ds, req.Rule, skip, startIdx, req.CashInit, 200)
+		res := backtestOne(ds, req.Rule, skip, startIdx, req.CashInit, 200, req.Reverse)
 		res.Coin = coin
 		perCoin = append(perCoin, res)
 		sumPnL += res.PnLPct
