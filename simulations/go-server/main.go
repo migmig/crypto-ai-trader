@@ -375,16 +375,14 @@ func reverseSignal(s signal) signal {
 	return sigHold
 }
 
-func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, maxTrades int, reverse bool) CoinResult {
+func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, maxTrades int, _ bool) CoinResult {
+	// 항상 롱 전략으로 백테스트. reverse 처리는 handler에서 mirrorResult()로 post-process.
 	cs, ind := ds.Candles, ds.Ind
 	if startIdx < 40 {
 		startIdx = 40
 	}
 	cash := cashInit
-	// 롱 포지션 (reverse=false 전용)
 	qty, cost, peak := 0.0, 0.0, 0.0
-	// 숏 포지션 (reverse=true 전용)
-	var shortQty, shortEntry, shortValley float64
 	nBuys, nSells := 0, 0
 	peakEq := cashInit
 	maxDD := 0.0
@@ -447,13 +445,7 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 		if (i-startIdx)%skip != 0 {
 			continue
 		}
-		// equity = 롱(cash + qty×price) 또는 숏(cash - shortQty×price)
-		var equity float64
-		if reverse {
-			equity = cash - shortQty*price
-		} else {
-			equity = cash + qty*price
-		}
+		equity := cash + qty*price
 		if equity > peakEq {
 			peakEq = equity
 		}
@@ -465,7 +457,6 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 			eq = append(eq, EquityPoint{T: cs[i].T.Format("2006-01-02T15:04:05"), V: equity, P: price})
 		}
 
-		// 롱 평균/피크
 		avg := 0.0
 		if qty > 0 {
 			avg = cost / qty
@@ -473,176 +464,86 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 				peak = price
 			}
 		}
-		// 숏 저점
-		if shortQty > 0 && price < shortValley {
-			shortValley = price
-		}
 		if !lastTrade.IsZero() && cs[i].T.Sub(lastTrade) < minHold {
 			continue
 		}
 		sig := signalAt(i, cs, ind)
 
-		if !reverse {
-			// ═══════════════════════════════════ LONG 모드 ═══════════════════════════════════
-			// 매도
-			if qty > 0 {
-				sellRatio, reason := 0.0, ""
-				profit := 0.0
-				if avg > 0 {
-					profit = price/avg - 1
+		// 매도
+		if qty > 0 {
+			sellRatio, reason := 0.0, ""
+			profit := 0.0
+			if avg > 0 {
+				profit = price/avg - 1
+			}
+			switch sig {
+			case sigSellStrong:
+				if profit >= rule.SellStrongMinProfit {
+					sellRatio, reason = 1.0, fmt.Sprintf("sell_strong(%+.1f%%)", profit*100)
 				}
-				switch sig {
-				case sigSellStrong:
-					if profit >= rule.SellStrongMinProfit {
-						sellRatio, reason = 1.0, fmt.Sprintf("sell_strong(%+.1f%%)", profit*100)
-					}
-				case sigSell:
-					if profit >= rule.SellStrongMinProfit {
-						sellRatio, reason = 0.5, fmt.Sprintf("sell(%+.1f%%)", profit*100)
-					}
-				}
-				if sellRatio == 0 && peak > 0 && price > avg*0.99 && price <= peak*(1+rule.TrailingPct) {
-					sellRatio, reason = 1.0, fmt.Sprintf("trail(%+.1f%%)", (price/peak-1)*100)
-				}
-				if sellRatio == 0 && avg > 0 && price <= avg*(1+rule.BackstopPct) {
-					sellRatio, reason = 1.0, fmt.Sprintf("backstop(%+.1f%%)", (price/avg-1)*100)
-				}
-				if sellRatio > 0 {
-					sold := qty * sellRatio
-					cash += sold * price * (1 - feeRate)
-					cost *= (1 - sellRatio)
-					qty -= sold
-					nSells++
-					lastTrade = cs[i].T
-					if len(trades) < maxTrades {
-						trades = append(trades, TradeEvent{T: cs[i].T.Format("2006-01-02T15:04:05"),
-							Action: "sell", Price: price, Qty: sold, Reason: reason})
-					}
-					if qty == 0 {
-						peak = 0
-					}
+			case sigSell:
+				if profit >= rule.SellStrongMinProfit {
+					sellRatio, reason = 0.5, fmt.Sprintf("sell(%+.1f%%)", profit*100)
 				}
 			}
-			// 매수
-			if sig == sigBuyStrong || sig == sigBuy {
-				pct := rule.BasePct
-				if sig == sigBuy {
-					pct = 0.10
+			if sellRatio == 0 && peak > 0 && price > avg*0.99 && price <= peak*(1+rule.TrailingPct) {
+				sellRatio, reason = 1.0, fmt.Sprintf("trail(%+.1f%%)", (price/peak-1)*100)
+			}
+			if sellRatio == 0 && avg > 0 && price <= avg*(1+rule.BackstopPct) {
+				sellRatio, reason = 1.0, fmt.Sprintf("backstop(%+.1f%%)", (price/avg-1)*100)
+			}
+			if sellRatio > 0 {
+				sold := qty * sellRatio
+				cash += sold * price * (1 - feeRate)
+				cost *= (1 - sellRatio)
+				qty -= sold
+				nSells++
+				lastTrade = cs[i].T
+				if len(trades) < maxTrades {
+					trades = append(trades, TradeEvent{T: cs[i].T.Format("2006-01-02T15:04:05"),
+						Action: "sell", Price: price, Qty: sold, Reason: reason})
 				}
-				target := equity * pct
-				amt := target
-				if amt > cash {
-					amt = cash
-				}
-				limit := equity*0.50 - qty*price
-				if limit < 0 {
-					limit = 0
-				}
-				if amt > limit {
-					amt = limit
-				}
-				if amt >= minTradeKRW {
-					buyQty := amt / price * (1 - feeRate)
-					qty += buyQty
-					cost += amt
-					cash -= amt
-					nBuys++
-					lastTrade = cs[i].T
-					if len(trades) < maxTrades {
-						trades = append(trades, TradeEvent{T: cs[i].T.Format("2006-01-02T15:04:05"),
-							Action: "buy", Price: price, Qty: buyQty,
-							Reason: fmt.Sprintf("%s(RSI %.0f)", sigName(sig), ind.RSI[i])})
-					}
+				if qty == 0 {
+					peak = 0
 				}
 			}
-		} else {
-			// ═══════════════════════════════════ SHORT 모드 (반대매매) ═══════════════════════════════════
-			// 커버 (숏 닫기): 알고리즘이 sell 신호 → 반대매매는 long/buy 의미 → 숏 포지션 종료
-			if shortQty > 0 {
-				coverRatio, reason := 0.0, ""
-				profit := 0.0
-				if shortEntry > 0 {
-					profit = (shortEntry - price) / shortEntry // 양수=이익
-				}
-				switch sig {
-				case sigSellStrong:
-					if profit >= rule.SellStrongMinProfit {
-						coverRatio, reason = 1.0, fmt.Sprintf("cover(%+.1f%%)", profit*100)
-					}
-				case sigSell:
-					if profit >= rule.SellStrongMinProfit {
-						coverRatio, reason = 0.5, fmt.Sprintf("cover_half(%+.1f%%)", profit*100)
-					}
-				}
-				// 트레일링 (상향): 저점 대비 trailing% 반등 시 커버 (익절 보호)
-				if coverRatio == 0 && shortValley > 0 && price < shortEntry*1.01 &&
-					price >= shortValley*(1-rule.TrailingPct) {
-					coverRatio, reason = 1.0, fmt.Sprintf("trail_up(%+.1f%%)", (price/shortValley-1)*100)
-				}
-				// 백스톱 (상향): 엔트리 대비 backstop% 상승 시 손절
-				if coverRatio == 0 && price >= shortEntry*(1-rule.BackstopPct) {
-					coverRatio, reason = 1.0, fmt.Sprintf("backstop_up(%+.1f%%)", (price/shortEntry-1)*100)
-				}
-				if coverRatio > 0 {
-					covered := shortQty * coverRatio
-					cash -= covered * price * (1 + feeRate)
-					shortQty -= covered
-					nSells++
-					lastTrade = cs[i].T
-					if len(trades) < maxTrades {
-						// 커버는 '매수' 방향 (BTC를 사서 갚는 것) → action=buy 표시
-						trades = append(trades, TradeEvent{T: cs[i].T.Format("2006-01-02T15:04:05"),
-							Action: "buy", Price: price, Qty: covered, Reason: reason})
-					}
-					if shortQty == 0 {
-						shortValley = 0
-						shortEntry = 0
-					}
-				}
+		}
+		// 매수
+		if sig == sigBuyStrong || sig == sigBuy {
+			pct := rule.BasePct
+			if sig == sigBuy {
+				pct = 0.10
 			}
-			// 숏 오픈: 알고리즘이 buy 신호 → 반대매매는 sell/short 의미 → 숏 포지션 오픈
-			if shortQty == 0 && (sig == sigBuyStrong || sig == sigBuy) {
-				pct := rule.BasePct
-				if sig == sigBuy {
-					pct = 0.10
-				}
-				notional := equity * pct
-				if notional > cash {
-					notional = cash
-				}
-				// 단일 코인 한도
-				limit := equity * 0.50
-				if notional > limit {
-					notional = limit
-				}
-				if notional >= minTradeKRW {
-					shortQty = notional / price
-					shortEntry = price
-					shortValley = price
-					cash += notional * (1 - feeRate)
-					nBuys++
-					lastTrade = cs[i].T
-					if len(trades) < maxTrades {
-						trades = append(trades, TradeEvent{T: cs[i].T.Format("2006-01-02T15:04:05"),
-							Action: "sell", Price: price, Qty: shortQty,
-							Reason: fmt.Sprintf("%s(RSI %.0f) short", sigName(sig), ind.RSI[i])})
-					}
+			target := equity * pct
+			amt := target
+			if amt > cash {
+				amt = cash
+			}
+			limit := equity*0.50 - qty*price
+			if limit < 0 {
+				limit = 0
+			}
+			if amt > limit {
+				amt = limit
+			}
+			if amt >= minTradeKRW {
+				buyQty := amt / price * (1 - feeRate)
+				qty += buyQty
+				cost += amt
+				cash -= amt
+				nBuys++
+				lastTrade = cs[i].T
+				if len(trades) < maxTrades {
+					trades = append(trades, TradeEvent{T: cs[i].T.Format("2006-01-02T15:04:05"),
+						Action: "buy", Price: price, Qty: buyQty,
+						Reason: fmt.Sprintf("%s(RSI %.0f)", sigName(sig), ind.RSI[i])})
 				}
 			}
 		}
 	}
 
 	finalPrice := cs[len(cs)-1].Close
-	// 종료 시점 포지션 청산
-	if qty > 0 {
-		cash += qty * finalPrice * (1 - feeRate)
-		qty = 0
-	}
-	if shortQty > 0 {
-		cash -= shortQty * finalPrice * (1 + feeRate)
-		shortQty = 0
-	}
-	final := cash
+	final := cash + qty*finalPrice
 
 	// Buy&Hold 최종
 	holdExit := finalPrice * (1 - feeRate)
@@ -678,6 +579,60 @@ func backtestOne(ds *DataSet, rule Rule, skip, startIdx int, cashInit float64, m
 		DCAPct:  dcaPct, DCACurve: dcaCurve, DCAInvested: dcaInvested,
 		Equity:  eq, Trades: trades,
 	}
+}
+
+// mirrorResult: 롱 백테스트 결과를 수학적으로 뒤집어 '완전 반대매매' 결과를 만듦.
+// equity_short(t) = 2×cashInit − equity_long(t) → 같은 시점 대칭 (거울)
+// - 모든 equity 포인트 반전
+// - trades action buy↔sell 뒤집기
+// - pnl 부호 반전, max_dd는 반전된 곡선에서 재계산
+func mirrorResult(r CoinResult, cashInit float64) CoinResult {
+	flipEq := func(src []EquityPoint) []EquityPoint {
+		out := make([]EquityPoint, len(src))
+		for i, p := range src {
+			out[i] = EquityPoint{T: p.T, V: 2*cashInit - p.V, P: p.P}
+		}
+		return out
+	}
+	out := r
+	out.Equity = flipEq(r.Equity)
+	// HoldCurve / DCACurve는 '비교 기준선'이라 그대로 유지 (홀딩·DCA는 방향 무관)
+	// (사용자가 '반대매매 vs 홀딩' 비교 가능하게)
+
+	// PnL 반전
+	out.PnLPct = -r.PnLPct
+	out.Final = 2*cashInit - r.Final
+
+	// Trades 방향 뒤집기
+	ts := make([]TradeEvent, len(r.Trades))
+	for i, t := range r.Trades {
+		a := t.Action
+		if a == "buy" {
+			a = "sell"
+		} else if a == "sell" {
+			a = "buy"
+		}
+		ts[i] = TradeEvent{T: t.T, Action: a, Price: t.Price, Qty: t.Qty, Reason: t.Reason}
+	}
+	out.Trades = ts
+	// nBuys/nSells도 상호 교환
+	out.NBuys, out.NSells = r.NSells, r.NBuys
+
+	// Max drawdown 재계산 (반전된 곡선 기준)
+	peak := cashInit
+	maxDD := 0.0
+	for _, p := range out.Equity {
+		if p.V > peak {
+			peak = p.V
+		}
+		dd := (p.V - peak) / peak
+		if dd < maxDD {
+			maxDD = dd
+		}
+	}
+	out.MaxDD = maxDD * 100
+
+	return out
 }
 
 func sigName(s signal) string {
@@ -803,8 +758,12 @@ func handleBacktest(w http.ResponseWriter, r *http.Request) {
 		if startIdx < 40 {
 			startIdx = 40
 		}
-		res := backtestOne(ds, req.Rule, skip, startIdx, req.CashInit, 200, req.Reverse)
+		res := backtestOne(ds, req.Rule, skip, startIdx, req.CashInit, 200, false)
 		res.Coin = coin
+		if req.Reverse {
+			res = mirrorResult(res, req.CashInit)
+			res.Coin = coin
+		}
 		perCoin = append(perCoin, res)
 		sumPnL += res.PnLPct
 		sumDD += res.MaxDD
