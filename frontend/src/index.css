@@ -1,1 +1,128 @@
 @import "tailwindcss";
+
+/* =====================================================================
+   Apple Design System tokens — adapted from frontend/DESIGN.md
+   Photography-first language, ported into a data-dense crypto dashboard.
+   ===================================================================== */
+@theme {
+  /* Interactive — single blue accent rule */
+  --color-apple-action: #0066cc;
+  --color-apple-focus: #0071e3;
+  --color-apple-sky: #2997ff;
+
+  /* Light surfaces */
+  --color-apple-white: #ffffff;
+  --color-apple-parchment: #f5f5f7;
+  --color-apple-pearl: #fafafc;
+
+  /* Near-black tiles (used as our dark theme floor) */
+  --color-apple-tile-1: #272729;
+  --color-apple-tile-2: #2a2a2c;
+  --color-apple-tile-3: #252527;
+  --color-apple-black: #000000;
+
+  /* Text */
+  --color-apple-ink: #1d1d1f;
+  --color-apple-ink-muted: #7a7a7a;
+  --color-apple-body-dark: #cccccc;
+
+  /* Borders */
+  --color-apple-divider: #f0f0f0;
+  --color-apple-hairline: #e0e0e0;
+  --color-apple-hairline-dark: rgba(255, 255, 255, 0.08);
+
+  /* Radii */
+  --radius-apple-sm: 8px;
+  --radius-apple-md: 11px;
+  --radius-apple-lg: 18px;
+  --radius-apple-pill: 9999px;
+
+  /* Spacing — 8px base */
+  --spacing-apple-xxs: 4px;
+  --spacing-apple-xs: 8px;
+  --spacing-apple-sm: 12px;
+  --spacing-apple-md: 17px;
+  --spacing-apple-lg: 24px;
+  --spacing-apple-xl: 32px;
+  --spacing-apple-xxl: 48px;
+  --spacing-apple-section: 80px;
+
+  /* Single shadow rule — reserved for product imagery only */
+  --shadow-apple-product: rgba(0, 0, 0, 0.22) 3px 5px 30px;
+}
+
+/* SF Pro stack + tightened body cadence */
+:root {
+  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    system-ui, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  background: var(--color-apple-tile-1);
+  color: #ffffff;
+}
+
+body {
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.022em; /* ≈ -0.374px at 17px */
+}
+
+/* Display sizes get the iconic tight tracking */
+h1, h2, h3, .apple-display {
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+    system-ui, sans-serif;
+  letter-spacing: -0.022em;
+  font-weight: 600;
+}
+
+/* Forbidden weight: 500 — guard via utility only (we don't enforce globally
+   because Tailwind's `font-medium` is used in many components). */
+
+/* Single micro-interaction: every button scales to 0.95 on press */
+button:active,
+[role="button"]:active,
+a[data-pill]:active {
+  transform: scale(0.95);
+  transition: transform 80ms ease-out;
+}
+button,
+[role="button"],
+a[data-pill] {
+  transition: transform 120ms ease-out, background-color 160ms ease,
+    color 160ms ease, border-color 160ms ease;
+}
+
+/* Pill CTA grammar */
+.apple-pill {
+  border-radius: var(--radius-apple-pill);
+  padding: 10px 20px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.apple-pill-primary {
+  background: var(--color-apple-action);
+  color: #ffffff;
+}
+.apple-pill-primary:hover {
+  background: var(--color-apple-focus);
+}
+.apple-pill-secondary {
+  background: transparent;
+  color: var(--color-apple-action);
+  border: 1px solid var(--color-apple-action);
+}
+.apple-pill-secondary:hover {
+  background: rgba(0, 102, 204, 0.08);
+}
+
+/* Hairline rule used in place of the heavier slate borders */
+.apple-hairline {
+  border-color: var(--color-apple-hairline-dark);
+}

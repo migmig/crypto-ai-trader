@@ -15,16 +15,42 @@ import { timeAgo } from './utils'
 import { useAuth } from './lib/auth'
 import { isSupabaseEnabled } from './lib/supabase'
 
+function AppleNavLink({
+  to,
+  end,
+  children,
+}: {
+  to: string
+  end?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `px-2.5 py-1 text-[12px] font-normal tracking-tight transition ${
+          isActive
+            ? 'text-white'
+            : 'text-white/60 hover:text-white'
+        }`
+      }
+    >
+      {children}
+    </NavLink>
+  )
+}
+
 function UserMenu() {
   const { user, signOut } = useAuth()
   if (!isSupabaseEnabled() || !user) return null
   const email = user.email || 'user'
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden md:inline text-xs text-slate-400 tabular-nums">{email}</span>
+      <span className="hidden md:inline text-[11px] text-[color:var(--color-apple-ink-muted)] tabular-nums">{email}</span>
       <button
         onClick={signOut}
-        className="bg-slate-800 border border-slate-700 text-slate-300 px-2 sm:px-3 py-1.5 rounded-lg text-sm hover:bg-slate-700 transition cursor-pointer"
+        className="bg-black/60 text-white/90 px-3 py-1.5 rounded-[8px] text-xs hover:bg-black/80 cursor-pointer"
         title="로그아웃"
       >
         <span className="hidden sm:inline">Logout</span>
@@ -71,7 +97,7 @@ function ResetButton({ onReset }: { onReset: () => void }) {
       disabled={busy}
       aria-label="Reset state"
       title="계좌 및 이력 초기화 (2단계 확인)"
-      className="bg-red-900/40 border border-red-700/70 text-red-200 px-2 sm:px-3 py-1.5 rounded-lg text-sm hover:bg-red-800/60 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      className="bg-black/60 text-red-300 hover:text-red-200 px-3 py-1.5 rounded-[8px] text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <span className="hidden sm:inline">{busy ? 'Resetting…' : 'Reset'}</span>
       <span className="sm:hidden">🗑</span>
@@ -96,146 +122,61 @@ function AuthedApp() {
 
   if (loading || !status) {
     return (
-      <div className="min-h-screen bg-[#0a0e17] flex items-center justify-center text-gray-400">
-        Loading...
+      <div className="min-h-screen bg-black flex items-center justify-center text-[color:var(--color-apple-body-dark)]">
+        Loading…
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] text-gray-200">
+    <div className="min-h-screen bg-[color:var(--color-apple-tile-1)] text-white">
       <TradeToaster />
-      <header className="bg-gray-900 border-b border-gray-800 px-3 sm:px-6 py-3 flex flex-wrap items-center gap-3 justify-between">
+      <header className="bg-black px-3 sm:px-6 h-11 sm:h-11 flex flex-wrap items-center gap-3 justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3 sm:gap-6 flex-wrap">
-          <h1 className="text-lg sm:text-xl font-bold shrink-0">
-            <span className="text-blue-400">AI</span> Crypto Trader
+          <h1 className="text-[15px] tracking-tight font-semibold shrink-0 text-white">
+            <span className="text-[color:var(--color-apple-sky)]">AI</span>&nbsp;Crypto&nbsp;Trader
           </h1>
-          <nav className="flex gap-1 flex-wrap">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              Dashboard
-            </NavLink>
-            <NavLink
-              to="/history"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
+          <nav className="flex gap-0.5 flex-wrap">
+            <AppleNavLink to="/" end>Dashboard</AppleNavLink>
+            <AppleNavLink to="/history">
               History
               {judgmentsTotal > 0 && (
-                <span className="ml-1.5 bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">
+                <span className="ml-1.5 bg-white/15 text-white/80 text-[10px] px-1.5 py-0.5 rounded-full">
                   {judgmentsTotal}
                 </span>
               )}
-            </NavLink>
-            <NavLink
-              to="/charts"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              Charts
-            </NavLink>
-            <NavLink
-              to="/simulations"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              Sims
-            </NavLink>
-            <NavLink
-              to="/playground"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              Playground
-            </NavLink>
-            <NavLink
-              to="/explorer"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              Explorer
-            </NavLink>
-            <NavLink
-              to="/reverse"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-orange-600/20 text-orange-400 border border-orange-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
-              Reverse
-            </NavLink>
-            <NavLink
-              to="/logs"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`
-              }
-            >
+            </AppleNavLink>
+            <AppleNavLink to="/charts">Charts</AppleNavLink>
+            <AppleNavLink to="/simulations">Sims</AppleNavLink>
+            <AppleNavLink to="/playground">Playground</AppleNavLink>
+            <AppleNavLink to="/explorer">Explorer</AppleNavLink>
+            <AppleNavLink to="/reverse">Reverse</AppleNavLink>
+            <AppleNavLink to="/logs">
               Logs
               {logs.some((l) => l.status === 'error') && (
-                <span className="ml-1.5 bg-red-700 text-red-200 text-[10px] px-1.5 py-0.5 rounded-full">
+                <span className="ml-1.5 bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">
                   !
                 </span>
               )}
-            </NavLink>
+            </AppleNavLink>
           </nav>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-          <span className="hidden sm:inline-block bg-emerald-900/60 text-emerald-300 px-3 py-1 rounded-full text-xs font-semibold">
+          <span className="hidden sm:inline-block text-[10px] tracking-wider text-white/70 px-2.5 py-0.5 rounded-full border border-white/15">
             SIMULATION
           </span>
-          <span className="sm:hidden bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+          <span className="sm:hidden text-[10px] tracking-wider text-white/70 px-2 py-0.5 rounded-full border border-white/15">
             SIM
           </span>
           {status.collected_at && (
-            <span className="hidden md:inline text-xs text-gray-500">
-              Data: {timeAgo(status.collected_at)}
+            <span className="hidden md:inline text-[11px] text-white/50">
+              {timeAgo(status.collected_at)}
             </span>
           )}
           <button
             onClick={refresh}
             aria-label="Refresh"
-            className="bg-gray-800 border border-gray-700 text-gray-200 px-2 sm:px-3 py-1.5 rounded-lg text-sm hover:bg-gray-700 transition cursor-pointer"
+            className="bg-white/10 hover:bg-white/15 text-white px-3 py-1.5 rounded-[8px] text-xs cursor-pointer"
           >
             <span className="hidden sm:inline">Refresh</span>
             <span className="sm:hidden">↻</span>
